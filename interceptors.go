@@ -11,6 +11,7 @@ import (
 	"github.com/go-coldbrew/errors/notifier"
 	"github.com/go-coldbrew/log"
 	"github.com/go-coldbrew/log/loggers"
+	"github.com/go-coldbrew/options"
 	nrutil "github.com/go-coldbrew/tracing/newrelic"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
@@ -87,11 +88,22 @@ func DebugLoggingInterceptor() grpc.UnaryServerInterceptor {
 //ResponseTimeLoggingInterceptor logs response time for each request on server
 func ResponseTimeLoggingInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		ctx = options.AddToOptions(ctx, "", "")
+		ctx = loggers.AddToLogContext(ctx, "", "")
 		defer func(begin time.Time) {
-			log.Info(ctx, "method", info.FullMethod, "error", err, "took", time.Since(begin))
+			log.Info(ctx, "error", err, "took", time.Since(begin))
 		}(time.Now())
+		ctx = loggers.AddToLogContext(ctx, "grpcMethod", info.FullMethod)
 		resp, err = handler(ctx, req)
 		return resp, err
+	}
+}
+
+func OptionsInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		ctx = options.AddToOptions(ctx, "", "")
+		//loggers.AddToLogContext(ctx, "transport", "gRPC")
+		return handler(ctx, req)
 	}
 }
 
