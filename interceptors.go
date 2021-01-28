@@ -27,7 +27,10 @@ var (
 	FilterMethods = []string{"Healthcheck", "HealthCheck"}
 )
 
-func filterFromZipkin(ctx context.Context, fullMethodName string) bool {
+// If it returns false, the given request will not be traced.
+type FilterFunc func(ctx context.Context, fullMethodName string) bool
+
+func filterMethods(ctx context.Context, fullMethodName string) bool {
 	for _, name := range FilterMethods {
 		if strings.Contains(fullMethodName, name) {
 			return false
@@ -39,9 +42,9 @@ func filterFromZipkin(ctx context.Context, fullMethodName string) bool {
 //DefaultInterceptors are the set of default interceptors that are applied to all coldbrew methods
 func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 	return []grpc.UnaryServerInterceptor{
-		ResponseTimeLoggingInterceptor(),
+		ResponseTimeLoggingInterceptor(filterMethods),
 		grpc_ctxtags.UnaryServerInterceptor(),
-		grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithFilterFunc(filterFromZipkin)),
+		grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithFilterFunc(filterMethods)),
 		grpc_prometheus.UnaryServerInterceptor,
 		ServerErrorInterceptor(),
 		NewRelicInterceptor(),
@@ -86,13 +89,16 @@ func DebugLoggingInterceptor() grpc.UnaryServerInterceptor {
 }
 
 //ResponseTimeLoggingInterceptor logs response time for each request on server
-func ResponseTimeLoggingInterceptor() grpc.UnaryServerInterceptor {
+func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		ctx = options.AddToOptions(ctx, "", "")
 		ctx = loggers.AddToLogContext(ctx, "", "")
-		defer func(begin time.Time) {
+		defer func(ctx context.Context, method string, begin time.Time) {
+			if ff != nil && ff(ctx, method) {
+				return
+			}
 			log.Info(ctx, "error", err, "took", time.Since(begin))
-		}(time.Now())
+		}(ctx, info.FullMethod, time.Now())
 		ctx = loggers.AddToLogContext(ctx, "grpcMethod", info.FullMethod)
 		resp, err = handler(ctx, req)
 		return resp, err
