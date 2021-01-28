@@ -94,7 +94,7 @@ func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor {
 		ctx = options.AddToOptions(ctx, "", "")
 		ctx = loggers.AddToLogContext(ctx, "", "")
 		defer func(ctx context.Context, method string, begin time.Time) {
-			if ff != nil && ff(ctx, method) {
+			if ff != nil && !ff(ctx, method) {
 				return
 			}
 			log.Info(ctx, "error", err, "took", time.Since(begin))
