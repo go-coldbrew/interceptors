@@ -3,6 +3,7 @@ package interceptors
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -232,4 +233,26 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 		return err
 
 	}
+}
+
+// NRHttpTracer adds newrelic tracing to this http function
+func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc) {
+	app := nrutil.GetNewRelicApp()
+	if app == nil {
+		return pattern, h
+	}
+	if pattern != "" {
+		return newrelic.WrapHandleFunc(app, pattern, h)
+	}
+	return pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		txn := app.StartTransaction(r.Method + " " + r.URL.Path)
+		defer txn.End()
+
+		w = txn.SetWebResponse(w)
+		txn.SetWebRequestHTTP(r)
+
+		r = newrelic.RequestWithTransactionContext(r, txn)
+
+		h.ServeHTTP(w, r)
+	})
 }
