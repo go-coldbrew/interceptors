@@ -18,6 +18,7 @@ import (
 	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/newrelic/go-agent/v3/integrations/nrgrpc"
 	newrelic "github.com/newrelic/go-agent/v3/newrelic"
 	"google.golang.org/grpc"
 )
@@ -115,12 +116,7 @@ func OptionsInterceptor() grpc.UnaryServerInterceptor {
 
 //NewRelicInterceptor intercepts all server actions and reports them to newrelic
 func NewRelicInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		ctx = nrutil.StartNRTransaction(info.FullMethod, ctx, nil, nil)
-		resp, err = handler(ctx, req)
-		nrutil.FinishNRTransaction(ctx, err)
-		return resp, err
-	}
+	return nrgrpc.UnaryServerInterceptor(nrutil.GetNewRelicApp())
 }
 
 //ServerErrorInterceptor intercepts all server actions and reports them to error notifier
