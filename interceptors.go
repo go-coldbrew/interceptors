@@ -161,15 +161,7 @@ func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor {
 
 //NewRelicClientInterceptor intercepts all client actions and reports them to newrelic
 func NewRelicClientInterceptor(address string) grpc.UnaryClientInterceptor {
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-		txn := nrutil.GetNewRelicTransactionFromContext(ctx)
-		seg := newrelic.ExternalSegment{
-			StartTime: newrelic.StartSegmentNow(txn),
-			URL:       "http://" + address + "/" + method,
-		}
-		defer seg.End()
-		return invoker(ctx, method, req, reply, cc, opts...)
-	}
+	return nrgrpc.UnaryClientInterceptor
 }
 
 //GRPCClientInterceptor is the interceptor that intercepts all cleint requests and adds tracing info to them
