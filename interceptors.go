@@ -26,7 +26,7 @@ import (
 
 var (
 	//FilterMethods is the list of methods that are filtered by default
-	FilterMethods = []string{"Healthcheck", "HealthCheck"}
+	FilterMethods = []string{"Healthcheck", "HealthCheck", "healthcheck"}
 )
 
 // If it returns false, the given request will not be traced.
@@ -55,12 +55,25 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 }
 
 //DefaultClientInterceptors are the set of default interceptors that should be applied to all client calls
-func DefaultClientInterceptors(address string) []grpc.UnaryClientInterceptor {
+func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInterceptor {
+	hystrixOptions := make([]grpc.CallOption, 0)
+	opentracingOpt := make([]grpc_opentracing.Option, 0)
+	for _, opt := range defaultOpts {
+		if opt == nil {
+			continue
+		}
+		if o, ok := opt.(grpc.CallOption); ok {
+			hystrixOptions = append(hystrixOptions, o)
+		}
+		if o, ok := opt.(grpc_opentracing.Option); ok {
+			opentracingOpt = append(opentracingOpt, o)
+		}
+	}
 	return []grpc.UnaryClientInterceptor{
 		grpc_retry.UnaryClientInterceptor(),
-		GRPCClientInterceptor(),
-		NewRelicClientInterceptor(address),
-		HystrixClientInterceptor(),
+		GRPCClientInterceptor(opentracingOpt...),
+		NewRelicClientInterceptor(),
+		HystrixClientInterceptor(hystrixOptions...),
 	}
 }
 
@@ -76,16 +89,16 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 }
 
 //DefaultClientInterceptor are the set of default interceptors that should be applied to all client calls
-func DefaultClientInterceptor(address string) grpc.UnaryClientInterceptor {
-	return grpc_middleware.ChainUnaryClient(DefaultClientInterceptors(address)...)
+func DefaultClientInterceptor(defaultOpts ...interface{}) grpc.UnaryClientInterceptor {
+	return grpc_middleware.ChainUnaryClient(DefaultClientInterceptors(defaultOpts...)...)
 }
 
 //DebugLoggingInterceptor is the interceptor that logs all request/response from a handler
 func DebugLoggingInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		fmt.Println(info, "requst", req)
+		log.Debug(ctx, "method", info.FullMethod, "requst", req)
 		resp, err := handler(ctx, req)
-		fmt.Println(info, "response", resp, "err", err)
+		log.Debug(ctx, "method", info.FullMethod, "response", resp, "err", err)
 		return resp, err
 	}
 }
@@ -133,7 +146,9 @@ func ServerErrorInterceptor() grpc.UnaryServerInterceptor {
 			ctx = loggers.AddToLogContext(ctx, "trace", traceID)
 		}
 		resp, err = handler(ctx, req)
-		go notifier.Notify(err, ctx)
+		if filterMethods(ctx, info.FullMethod) {
+			go notifier.Notify(err, ctx)
+		}
 		return resp, err
 	}
 }
@@ -160,20 +175,27 @@ func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor {
 }
 
 //NewRelicClientInterceptor intercepts all client actions and reports them to newrelic
-func NewRelicClientInterceptor(address string) grpc.UnaryClientInterceptor {
+func NewRelicClientInterceptor() grpc.UnaryClientInterceptor {
 	return nrgrpc.UnaryClientInterceptor
 }
 
 //GRPCClientInterceptor is the interceptor that intercepts all cleint requests and adds tracing info to them
-func GRPCClientInterceptor() grpc.UnaryClientInterceptor {
-	return grpc_opentracing.UnaryClientInterceptor()
+func GRPCClientInterceptor(options ...grpc_opentracing.Option) grpc.UnaryClientInterceptor {
+	return grpc_opentracing.UnaryClientInterceptor(options...)
 }
 
-//HystrixClientInterceptor is the interceptor that intercepts all cleint requests and adds hystrix info to them
-func HystrixClientInterceptor() grpc.UnaryClientInterceptor {
+//HystrixClientInterceptor is the interceptor that intercepts all client requests and adds hystrix info to them
+func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		options := clientOptions{
 			hystrixName: method,
+		}
+		for _, opt := range defaultOpts {
+			if opt != nil {
+				if o, ok := opt.(clientOption); ok {
+					o.process(&options)
+				}
+			}
 		}
 		for _, opt := range opts {
 			if opt != nil {
@@ -181,6 +203,10 @@ func HystrixClientInterceptor() grpc.UnaryClientInterceptor {
 					o.process(&options)
 				}
 			}
+		}
+		if options.disableHystrix {
+			// short circuit if hystrix is disabled
+			return invoker(ctx, method, req, reply, cc, opts...)
 		}
 		newCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
@@ -221,7 +247,9 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 			ctx = loggers.AddToLogContext(ctx, "trace", traceID)
 		}
 		err = handler(srv, stream)
-		go notifier.Notify(err, ctx)
+		if filterMethods(ctx, info.FullMethod) {
+			go notifier.Notify(err, ctx)
+		}
 		return err
 
 	}
@@ -237,14 +265,14 @@ func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
 		return newrelic.WrapHandleFunc(app, pattern, h)
 	}
 	return pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		txn := app.StartTransaction(r.Method + " " + r.URL.Path)
-		defer txn.End()
-
-		w = txn.SetWebResponse(w)
-		txn.SetWebRequestHTTP(r)
-
-		r = newrelic.RequestWithTransactionContext(r, txn)
-
+		// filter functions we do not need
+		if filterMethods(context.Background(), r.URL.Path) {
+			txn := app.StartTransaction(r.Method + " " + r.URL.Path)
+			defer txn.End()
+			w = txn.SetWebResponse(w)
+			txn.SetWebRequestHTTP(r)
+			r = newrelic.RequestWithTransactionContext(r, txn)
+		}
 		h.ServeHTTP(w, r)
 	})
 }

@@ -8,7 +8,8 @@ type clientOption interface {
 }
 
 type clientOptions struct {
-	hystrixName string
+	hystrixName    string
+	disableHystrix bool
 }
 
 type optionCarrier struct {
@@ -27,6 +28,24 @@ func WithHystrixName(name string) clientOption {
 			if name != "" {
 				co.hystrixName = name
 			}
+		},
+	}
+}
+
+// WithoutHystrix disables hystrix
+func WithoutHystrix() clientOption {
+	return &optionCarrier{
+		processor: func(co *clientOptions) {
+			co.disableHystrix = true
+		},
+	}
+}
+
+// WithHystrix enables hystrix
+func WithHystrix() clientOption {
+	return &optionCarrier{
+		processor: func(co *clientOptions) {
+			co.disableHystrix = false
 		},
 	}
 }
