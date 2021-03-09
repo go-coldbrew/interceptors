@@ -32,7 +32,8 @@ var (
 // If it returns false, the given request will not be traced.
 type FilterFunc func(ctx context.Context, fullMethodName string) bool
 
-func filterMethods(ctx context.Context, fullMethodName string) bool {
+//FilterMethodsFunc is the default implementation of Filter function
+func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool {
 	for _, name := range FilterMethods {
 		if strings.Contains(fullMethodName, name) {
 			return false
@@ -44,9 +45,9 @@ func filterMethods(ctx context.Context, fullMethodName string) bool {
 //DefaultInterceptors are the set of default interceptors that are applied to all coldbrew methods
 func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 	return []grpc.UnaryServerInterceptor{
-		ResponseTimeLoggingInterceptor(filterMethods),
+		ResponseTimeLoggingInterceptor(FilterMethodsFunc),
 		grpc_ctxtags.UnaryServerInterceptor(),
-		grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithFilterFunc(filterMethods)),
+		grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithFilterFunc(FilterMethodsFunc)),
 		grpc_prometheus.UnaryServerInterceptor,
 		ServerErrorInterceptor(),
 		NewRelicInterceptor(),
@@ -146,7 +147,7 @@ func ServerErrorInterceptor() grpc.UnaryServerInterceptor {
 			ctx = loggers.AddToLogContext(ctx, "trace", traceID)
 		}
 		resp, err = handler(ctx, req)
-		if filterMethods(ctx, info.FullMethod) {
+		if FilterMethodsFunc(ctx, info.FullMethod) {
 			go notifier.Notify(err, ctx)
 		}
 		return resp, err
@@ -247,7 +248,7 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 			ctx = loggers.AddToLogContext(ctx, "trace", traceID)
 		}
 		err = handler(srv, stream)
-		if filterMethods(ctx, info.FullMethod) {
+		if FilterMethodsFunc(ctx, info.FullMethod) {
 			go notifier.Notify(err, ctx)
 		}
 		return err
@@ -266,7 +267,7 @@ func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
 	}
 	return pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// filter functions we do not need
-		if filterMethods(context.Background(), r.URL.Path) {
+		if FilterMethodsFunc(context.Background(), r.URL.Path) {
 			txn := app.StartTransaction(r.Method + " " + r.URL.Path)
 			defer txn.End()
 			w = txn.SetWebResponse(w)
