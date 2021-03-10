@@ -131,7 +131,14 @@ func OptionsInterceptor() grpc.UnaryServerInterceptor {
 
 //NewRelicInterceptor intercepts all server actions and reports them to newrelic
 func NewRelicInterceptor() grpc.UnaryServerInterceptor {
-	return nrgrpc.UnaryServerInterceptor(nrutil.GetNewRelicApp())
+	nrh := nrgrpc.UnaryServerInterceptor(nrutil.GetNewRelicApp())
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		if FilterMethodsFunc(ctx, info.FullMethod) {
+			return nrh(ctx, req, info, handler)
+		} else {
+			return handler(ctx, req)
+		}
+	}
 }
 
 //ServerErrorInterceptor intercepts all server actions and reports them to error notifier
@@ -177,7 +184,13 @@ func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor {
 
 //NewRelicClientInterceptor intercepts all client actions and reports them to newrelic
 func NewRelicClientInterceptor() grpc.UnaryClientInterceptor {
-	return nrgrpc.UnaryClientInterceptor
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		if FilterMethodsFunc(ctx, method) {
+			return nrgrpc.UnaryClientInterceptor(ctx, method, req, reply, cc, invoker, opts...)
+		} else {
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}
+	}
 }
 
 //GRPCClientInterceptor is the interceptor that intercepts all cleint requests and adds tracing info to them
