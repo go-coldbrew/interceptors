@@ -1,4 +1,5 @@
-package interceptors
+/*Package interceptors provides a common set of interceptors which are used in Coldbrew
 
-// This comment block (re)generates the documentation.
-//go:generate godoc2ghmd -ex -file=README.md github.com/go-coldbrew/interceptors
+Almost all of these interceptors are reusable and can be used in any other project using grpc.
+*/
+package interceptors
