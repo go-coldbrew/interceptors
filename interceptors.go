@@ -26,7 +26,8 @@ import (
 
 var (
 	//FilterMethods is the list of methods that are filtered by default
-	FilterMethods = []string{"Healthcheck", "HealthCheck", "healthcheck"}
+	FilterMethods     = []string{"Healthcheck", "HealthCheck", "healthcheck"}
+	defaultFilterFunc = FilterMethodsFunc
 )
 
 // If it returns false, the given request will not be traced.
@@ -42,12 +43,19 @@ func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool {
 	return true
 }
 
+//SetFilterFunc sets the default filter function to be used by interceptors
+func SetFilterFunc(ctx context.Context, ff FilterFunc) {
+	if ff != nil {
+		defaultFilterFunc = ff
+	}
+}
+
 //DefaultInterceptors are the set of default interceptors that are applied to all coldbrew methods
 func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 	return []grpc.UnaryServerInterceptor{
-		ResponseTimeLoggingInterceptor(FilterMethodsFunc),
+		ResponseTimeLoggingInterceptor(defaultFilterFunc),
 		grpc_ctxtags.UnaryServerInterceptor(),
-		grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithFilterFunc(FilterMethodsFunc)),
+		grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithFilterFunc(defaultFilterFunc)),
 		grpc_prometheus.UnaryServerInterceptor,
 		ServerErrorInterceptor(),
 		NewRelicInterceptor(),
@@ -133,7 +141,7 @@ func OptionsInterceptor() grpc.UnaryServerInterceptor {
 func NewRelicInterceptor() grpc.UnaryServerInterceptor {
 	nrh := nrgrpc.UnaryServerInterceptor(nrutil.GetNewRelicApp())
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		if FilterMethodsFunc(ctx, info.FullMethod) {
+		if defaultFilterFunc(ctx, info.FullMethod) {
 			return nrh(ctx, req, info, handler)
 		} else {
 			return handler(ctx, req)
@@ -154,7 +162,7 @@ func ServerErrorInterceptor() grpc.UnaryServerInterceptor {
 			ctx = loggers.AddToLogContext(ctx, "trace", traceID)
 		}
 		resp, err = handler(ctx, req)
-		if FilterMethodsFunc(ctx, info.FullMethod) {
+		if defaultFilterFunc(ctx, info.FullMethod) {
 			go notifier.Notify(err, ctx)
 		}
 		return resp, err
@@ -185,7 +193,7 @@ func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor {
 //NewRelicClientInterceptor intercepts all client actions and reports them to newrelic
 func NewRelicClientInterceptor() grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-		if FilterMethodsFunc(ctx, method) {
+		if defaultFilterFunc(ctx, method) {
 			return nrgrpc.UnaryClientInterceptor(ctx, method, req, reply, cc, invoker, opts...)
 		} else {
 			return invoker(ctx, method, req, reply, cc, opts...)
@@ -261,7 +269,7 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 			ctx = loggers.AddToLogContext(ctx, "trace", traceID)
 		}
 		err = handler(srv, stream)
-		if FilterMethodsFunc(ctx, info.FullMethod) {
+		if defaultFilterFunc(ctx, info.FullMethod) {
 			go notifier.Notify(err, ctx)
 		}
 		return err
@@ -280,7 +288,7 @@ func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
 	}
 	return pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// filter functions we do not need
-		if FilterMethodsFunc(context.Background(), r.URL.Path) {
+		if defaultFilterFunc(context.Background(), r.URL.Path) {
 			txn := app.StartTransaction(r.Method + " " + r.URL.Path)
 			defer txn.End()
 			w = txn.SetWebResponse(w)
