@@ -83,6 +83,7 @@ func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInt
 		GRPCClientInterceptor(opentracingOpt...),
 		NewRelicClientInterceptor(),
 		HystrixClientInterceptor(hystrixOptions...),
+		grpc_prometheus.UnaryClientInterceptor,
 	}
 }
 
