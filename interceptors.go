@@ -19,6 +19,7 @@ import (
 	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/newrelic/go-agent/v3/integrations/nrgrpc"
 	newrelic "github.com/newrelic/go-agent/v3/newrelic"
 	"google.golang.org/grpc"
@@ -50,10 +51,41 @@ func SetFilterFunc(ctx context.Context, ff FilterFunc) {
 	}
 }
 
+// DoHTTPtoGRPC allows calling the interceptors when you use the Register<svc-name>HandlerServer in grpc-gateway,
+// see example below for reference
+//
+//    func (s *svc) Echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
+//        handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+//            return s.echo(ctx, req.(*proto.EchoRequest))
+//        }
+//        r, e := doHTTPtoGRPC(ctx, s, handler, req)
+//        if e != nil {
+//            return nil, e.(error)
+//        }
+//        return r.(*proto.EchoResponse), nil
+//    }
+//
+//    func (s *svc) echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
+//           .... implementation ....
+//    }
+func DoHTTPtoGRPC(ctx context.Context, svr interface{}, handler func(ctx context.Context, req interface{}) (interface{}, error), in interface{}) (interface{}, error) {
+	method, ok := runtime.RPCMethod(ctx)
+	if ok {
+		interceptor := grpc_middleware.ChainUnaryServer(DefaultInterceptors()...)
+		info := &grpc.UnaryServerInfo{
+			Server:     svr,
+			FullMethod: method,
+		}
+		return interceptor(ctx, in, info, handler)
+	}
+	return handler(ctx, in)
+}
+
 //DefaultInterceptors are the set of default interceptors that are applied to all coldbrew methods
 func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 	return []grpc.UnaryServerInterceptor{
 		ResponseTimeLoggingInterceptor(defaultFilterFunc),
+		TraceIdInterceptor(),
 		grpc_ctxtags.UnaryServerInterceptor(),
 		grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithFilterFunc(defaultFilterFunc)),
 		grpc_prometheus.UnaryServerInterceptor,
@@ -298,4 +330,19 @@ func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
 		}
 		h.ServeHTTP(w, r)
 	})
+}
+
+// TraceIdInterceptor allows injecting trace id from request objects
+func TraceIdInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		if req != nil {
+			// fetch and update trace id from request
+			if r, ok := req.(interface{ GetTraceId() string }); ok {
+				notifier.UpdateTraceId(ctx, r.GetTraceId())
+			} else if r, ok := req.(interface{ GetTraceID() string }); ok {
+				notifier.UpdateTraceId(ctx, r.GetTraceID())
+			}
+		}
+		return handler(ctx, req)
+	}
 }
