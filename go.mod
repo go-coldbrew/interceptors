@@ -13,7 +13,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.4.0
 	github.com/newrelic/go-agent/v3 v3.9.0
 	github.com/newrelic/go-agent/v3/integrations/nrgrpc v1.1.0
-	github.com/princjef/gomarkdoc v0.1.3 // indirect
+	github.com/princjef/gomarkdoc v0.2.0 // indirect
 	github.com/prometheus/client_golang v1.9.0 // indirect
 	google.golang.org/grpc v1.37.0
 )

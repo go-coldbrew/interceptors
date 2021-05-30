@@ -302,7 +302,7 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 			ctx = loggers.AddToLogContext(ctx, "trace", traceID)
 		}
 		err = handler(srv, stream)
-		if defaultFilterFunc(ctx, info.FullMethod) {
+		if defaultFilterFunc(ctx, info.FullMethod) && shouldNotify(ctx) {
 			go notifier.Notify(err, ctx)
 		}
 		return err

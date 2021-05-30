@@ -1,6 +1,11 @@
 package interceptors
 
-import "google.golang.org/grpc"
+import (
+	"context"
+
+	"github.com/go-coldbrew/options"
+	"google.golang.org/grpc"
+)
 
 type clientOption interface {
 	grpc.CallOption
@@ -48,4 +53,26 @@ func WithHystrix() clientOption {
 			co.disableHystrix = false
 		},
 	}
+}
+
+const (
+	doNotNotifyKey = "interceptor-do-not-notify"
+)
+
+// IgnoreErrorNotification defines if Coldbrew should send this error to notifier or not
+// this should be called from within the service code
+func IgnoreErrorNotification(ctx context.Context, ignore bool) context.Context {
+	return options.AddToOptions(ctx, doNotNotifyKey, ignore)
+}
+
+func shouldNotify(ctx context.Context) bool {
+	opt := options.FromContext(ctx)
+	if opt != nil {
+		if val, ok := opt.Get(doNotNotifyKey); ok && val != nil {
+			if ignore, ok := val.(bool); ok {
+				return ignore
+			}
+		}
+	}
+	return true
 }

@@ -25,6 +25,7 @@ Almost all of these interceptors are reusable and can be used in any other proje
 - [func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool](<#func-filtermethodsfunc>)
 - [func GRPCClientInterceptor(options ...grpc_opentracing.Option) grpc.UnaryClientInterceptor](<#func-grpcclientinterceptor>)
 - [func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientInterceptor](<#func-hystrixclientinterceptor>)
+- [func IgnoreErrorNotification(ctx context.Context, ignore bool) context.Context](<#func-ignoreerrornotification>)
 - [func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)](<#func-nrhttptracer>)
 - [func NewRelicClientInterceptor() grpc.UnaryClientInterceptor](<#func-newrelicclientinterceptor>)
 - [func NewRelicInterceptor() grpc.UnaryServerInterceptor](<#func-newrelicinterceptor>)
@@ -136,6 +137,14 @@ func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientIn
 ```
 
 HystrixClientInterceptor is the interceptor that intercepts all client requests and adds hystrix info to them
+
+## func [IgnoreErrorNotification](<https://github.com/go-coldbrew/interceptors/blob/main/options.go#L64>)
+
+```go
+func IgnoreErrorNotification(ctx context.Context, ignore bool) context.Context
+```
+
+IgnoreErrorNotification defines if Coldbrew should send this error to notifier or not this should be called from within the service code
 
 ## func [NRHttpTracer](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L314>)
 
