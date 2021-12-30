@@ -6,5 +6,5 @@ test:
 	go test ./...
 
 doc:
-	go get github.com/princjef/gomarkdoc/cmd/gomarkdoc
+	go install github.com/princjef/gomarkdoc/cmd/gomarkdoc
 	gomarkdoc ./...

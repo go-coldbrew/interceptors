@@ -119,6 +119,24 @@ func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInt
 	}
 }
 
+//DefaultClientStreamInterceptors are the set of default interceptors that should be applied to all stream client calls
+func DefaultClientStreamInterceptors(defaultOpts ...interface{}) []grpc.StreamClientInterceptor {
+	opentracingOpt := make([]grpc_opentracing.Option, 0)
+	for _, opt := range defaultOpts {
+		if opt == nil {
+			continue
+		}
+		if o, ok := opt.(grpc_opentracing.Option); ok {
+			opentracingOpt = append(opentracingOpt, o)
+		}
+	}
+	return []grpc.StreamClientInterceptor{
+		grpc_opentracing.StreamClientInterceptor(opentracingOpt...),
+		nrgrpc.StreamClientInterceptor,
+		grpc_prometheus.StreamClientInterceptor,
+	}
+}
+
 //DefaultStreamInterceptors are the set of default interceptors that should be applied to all coldbrew streams
 func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 	return []grpc.StreamServerInterceptor{
@@ -133,6 +151,11 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 //DefaultClientInterceptor are the set of default interceptors that should be applied to all client calls
 func DefaultClientInterceptor(defaultOpts ...interface{}) grpc.UnaryClientInterceptor {
 	return grpc_middleware.ChainUnaryClient(DefaultClientInterceptors(defaultOpts...)...)
+}
+
+//DefaultClientStreamInterceptor are the set of default interceptors that should be applied to all stream client calls
+func DefaultClientStreamInterceptor(defaultOpts ...interface{}) grpc.StreamClientInterceptor {
+	return grpc_middleware.ChainStreamClient(DefaultClientStreamInterceptors(defaultOpts...)...)
 }
 
 //DebugLoggingInterceptor is the interceptor that logs all request/response from a handler
