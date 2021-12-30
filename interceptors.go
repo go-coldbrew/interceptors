@@ -27,7 +27,7 @@ import (
 
 var (
 	//FilterMethods is the list of methods that are filtered by default
-	FilterMethods     = []string{"Healthcheck", "HealthCheck", "healthcheck"}
+	FilterMethods     = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
 	defaultFilterFunc = FilterMethodsFunc
 )
 
@@ -37,7 +37,7 @@ type FilterFunc func(ctx context.Context, fullMethodName string) bool
 //FilterMethodsFunc is the default implementation of Filter function
 func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool {
 	for _, name := range FilterMethods {
-		if strings.Contains(fullMethodName, name) {
+		if strings.Contains(strings.ToLower(fullMethodName), name) {
 			return false
 		}
 	}
