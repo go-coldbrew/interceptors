@@ -123,69 +123,96 @@ func DoHTTPtoGRPC(ctx context.Context, svr interface{}, handler func(ctx context
 
 // DefaultInterceptors are the set of default interceptors that are applied to all coldbrew methods
 func DefaultInterceptors() []grpc.UnaryServerInterceptor {
-	return []grpc.UnaryServerInterceptor{
-		ResponseTimeLoggingInterceptor(defaultFilterFunc),
-		TraceIdInterceptor(),
-		grpc_ctxtags.UnaryServerInterceptor(),
-		grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithFilterFunc(defaultFilterFunc)),
-		grpc_prometheus.UnaryServerInterceptor,
-		ServerErrorInterceptor(),
-		NewRelicInterceptor(),
-		PanicRecoveryInterceptor(),
+	ints := []grpc.UnaryServerInterceptor{}
+	if len(unaryServerInterceptors) > 0 {
+		ints = append(ints, unaryServerInterceptors...)
 	}
+	if !replaceServerInterceptors {
+		ints = append(ints,
+			ResponseTimeLoggingInterceptor(defaultFilterFunc),
+			TraceIdInterceptor(),
+			grpc_ctxtags.UnaryServerInterceptor(),
+			grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithFilterFunc(defaultFilterFunc)),
+			grpc_prometheus.UnaryServerInterceptor,
+			ServerErrorInterceptor(),
+			NewRelicInterceptor(),
+			PanicRecoveryInterceptor(),
+		)
+	}
+	return ints
 }
 
 // DefaultClientInterceptors are the set of default interceptors that should be applied to all client calls
 func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInterceptor {
-	hystrixOptions := make([]grpc.CallOption, 0)
-	opentracingOpt := make([]grpc_opentracing.Option, 0)
-	for _, opt := range defaultOpts {
-		if opt == nil {
-			continue
-		}
-		if o, ok := opt.(grpc.CallOption); ok {
-			hystrixOptions = append(hystrixOptions, o)
-		}
-		if o, ok := opt.(grpc_opentracing.Option); ok {
-			opentracingOpt = append(opentracingOpt, o)
-		}
+	ints := []grpc.UnaryClientInterceptor{}
+	if len(unaryClientInterceptors) > 0 {
+		ints = append(ints, unaryClientInterceptors...)
 	}
-	return []grpc.UnaryClientInterceptor{
-		grpc_retry.UnaryClientInterceptor(),
-		GRPCClientInterceptor(opentracingOpt...),
-		NewRelicClientInterceptor(),
-		HystrixClientInterceptor(hystrixOptions...),
-		grpc_prometheus.UnaryClientInterceptor,
+	if !replaceClientInterceptors {
+		hystrixOptions := make([]grpc.CallOption, 0)
+		opentracingOpt := make([]grpc_opentracing.Option, 0)
+		for _, opt := range defaultOpts {
+			if opt == nil {
+				continue
+			}
+			if o, ok := opt.(grpc.CallOption); ok {
+				hystrixOptions = append(hystrixOptions, o)
+			}
+			if o, ok := opt.(grpc_opentracing.Option); ok {
+				opentracingOpt = append(opentracingOpt, o)
+			}
+		}
+		ints = append(ints, grpc_retry.UnaryClientInterceptor(),
+			GRPCClientInterceptor(opentracingOpt...),
+			NewRelicClientInterceptor(),
+			HystrixClientInterceptor(hystrixOptions...),
+			grpc_prometheus.UnaryClientInterceptor,
+		)
 	}
+	return ints
 }
 
 // DefaultClientStreamInterceptors are the set of default interceptors that should be applied to all stream client calls
 func DefaultClientStreamInterceptors(defaultOpts ...interface{}) []grpc.StreamClientInterceptor {
-	opentracingOpt := make([]grpc_opentracing.Option, 0)
-	for _, opt := range defaultOpts {
-		if opt == nil {
-			continue
-		}
-		if o, ok := opt.(grpc_opentracing.Option); ok {
-			opentracingOpt = append(opentracingOpt, o)
-		}
+	ints := []grpc.StreamClientInterceptor{}
+	if len(streamClientInterceptors) > 0 {
+		ints = append(ints, streamClientInterceptors...)
 	}
-	return []grpc.StreamClientInterceptor{
-		grpc_opentracing.StreamClientInterceptor(opentracingOpt...),
-		nrgrpc.StreamClientInterceptor,
-		grpc_prometheus.StreamClientInterceptor,
+	if !replaceClientInterceptors {
+		opentracingOpt := make([]grpc_opentracing.Option, 0)
+		for _, opt := range defaultOpts {
+			if opt == nil {
+				continue
+			}
+			if o, ok := opt.(grpc_opentracing.Option); ok {
+				opentracingOpt = append(opentracingOpt, o)
+			}
+		}
+		ints = append(ints,
+			grpc_opentracing.StreamClientInterceptor(opentracingOpt...),
+			nrgrpc.StreamClientInterceptor,
+			grpc_prometheus.StreamClientInterceptor,
+		)
 	}
+	return ints
 }
 
 // DefaultStreamInterceptors are the set of default interceptors that should be applied to all coldbrew streams
 func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
-	return []grpc.StreamServerInterceptor{
-		ResponseTimeLoggingStreamInterceptor(),
-		grpc_ctxtags.StreamServerInterceptor(),
-		grpc_opentracing.StreamServerInterceptor(),
-		grpc_prometheus.StreamServerInterceptor,
-		ServerErrorStreamInterceptor(),
+	ints := []grpc.StreamServerInterceptor{}
+	if len(streamServerInterceptors) > 0 {
+		ints = append(ints, streamServerInterceptors...)
 	}
+	if !replaceServerInterceptors {
+		ints = append(ints,
+			ResponseTimeLoggingStreamInterceptor(),
+			grpc_ctxtags.StreamServerInterceptor(),
+			grpc_opentracing.StreamServerInterceptor(),
+			grpc_prometheus.StreamServerInterceptor,
+			ServerErrorStreamInterceptor(),
+		)
+	}
+	return ints
 }
 
 // DefaultClientInterceptor are the set of default interceptors that should be applied to all client calls
