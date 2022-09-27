@@ -27,14 +27,14 @@ import (
 
 var (
 	//FilterMethods is the list of methods that are filtered by default
-	FilterMethods             = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
-	defaultFilterFunc         = FilterMethodsFunc
-	unaryServerInterceptors   = []grpc.UnaryServerInterceptor{}
-	streamServerInterceptors  = []grpc.StreamServerInterceptor{}
-	replaceServerInterceptors = false
-	unaryClientInterceptors   = []grpc.UnaryClientInterceptor{}
-	streamClientInterceptors  = []grpc.StreamClientInterceptor{}
-	replaceClientInterceptors = false
+	FilterMethods            = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
+	defaultFilterFunc        = FilterMethodsFunc
+	unaryServerInterceptors  = []grpc.UnaryServerInterceptor{}
+	streamServerInterceptors = []grpc.StreamServerInterceptor{}
+	useCBServerInterceptors  = true
+	unaryClientInterceptors  = []grpc.UnaryClientInterceptor{}
+	streamClientInterceptors = []grpc.StreamClientInterceptor{}
+	useCBClientInterceptors  = false
 )
 
 // If it returns false, the given request will not be traced.
@@ -58,37 +58,37 @@ func SetFilterFunc(ctx context.Context, ff FilterFunc) {
 }
 
 // AddUnaryServerInterceptor adds a server interceptor to default server interceptors
-func AddUnaryServerInterceptor(ctx context.Context, i grpc.UnaryServerInterceptor) {
-	unaryServerInterceptors = append(unaryServerInterceptors, i)
+func AddUnaryServerInterceptor(ctx context.Context, i ...grpc.UnaryServerInterceptor) {
+	unaryServerInterceptors = append(unaryServerInterceptors, i...)
 }
 
 // AddStreamServerInterceptor adds a server interceptor to default server interceptors
-func AddStreamServerInterceptor(ctx context.Context, i grpc.StreamServerInterceptor) {
-	streamServerInterceptors = append(streamServerInterceptors, i)
+func AddStreamServerInterceptor(ctx context.Context, i ...grpc.StreamServerInterceptor) {
+	streamServerInterceptors = append(streamServerInterceptors, i...)
 }
 
-// ReplaceColdBrewServerInterceptors allows enabling/disabling coldbrew server interceptors
+// UseColdBrewServerInterceptors allows enabling/disabling coldbrew server interceptors
 //
 // when set to true, the coldbrew server interceptors will not used
-func ReplaceColdBrewServerInterceptors(ctx context.Context, flag bool) {
-	replaceServerInterceptors = flag
+func UseColdBrewServerInterceptors(ctx context.Context, flag bool) {
+	useCBServerInterceptors = flag
 }
 
 // AddUnaryClientInterceptor adds a server interceptor to default server interceptors
-func AddUnaryClientInterceptor(ctx context.Context, i grpc.UnaryClientInterceptor) {
-	unaryClientInterceptors = append(unaryClientInterceptors, i)
+func AddUnaryClientInterceptor(ctx context.Context, i ...grpc.UnaryClientInterceptor) {
+	unaryClientInterceptors = append(unaryClientInterceptors, i...)
 }
 
 // AddStreamClientInterceptor adds a server interceptor to default server interceptors
-func AddStreamClientInterceptor(ctx context.Context, i grpc.StreamClientInterceptor) {
-	streamClientInterceptors = append(streamClientInterceptors, i)
+func AddStreamClientInterceptor(ctx context.Context, i ...grpc.StreamClientInterceptor) {
+	streamClientInterceptors = append(streamClientInterceptors, i...)
 }
 
-// ReplaceColdBrewClientInterceptors allows enabling/disabling coldbrew client interceptors
+// UseColdBrewClientInterceptors allows enabling/disabling coldbrew client interceptors
 //
 // when set to true, the coldbrew client interceptors will not used
-func ReplaceColdBrewClientInterceptors(ctx context.Context, flag bool) {
-	replaceClientInterceptors = flag
+func UseColdBrewClientInterceptors(ctx context.Context, flag bool) {
+	useCBClientInterceptors = flag
 }
 
 // DoHTTPtoGRPC allows calling the interceptors when you use the Register<svc-name>HandlerServer in grpc-gateway,
@@ -127,7 +127,7 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 	if len(unaryServerInterceptors) > 0 {
 		ints = append(ints, unaryServerInterceptors...)
 	}
-	if !replaceServerInterceptors {
+	if useCBServerInterceptors {
 		ints = append(ints,
 			ResponseTimeLoggingInterceptor(defaultFilterFunc),
 			TraceIdInterceptor(),
@@ -148,7 +148,7 @@ func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInt
 	if len(unaryClientInterceptors) > 0 {
 		ints = append(ints, unaryClientInterceptors...)
 	}
-	if !replaceClientInterceptors {
+	if useCBClientInterceptors {
 		hystrixOptions := make([]grpc.CallOption, 0)
 		opentracingOpt := make([]grpc_opentracing.Option, 0)
 		for _, opt := range defaultOpts {
@@ -178,7 +178,7 @@ func DefaultClientStreamInterceptors(defaultOpts ...interface{}) []grpc.StreamCl
 	if len(streamClientInterceptors) > 0 {
 		ints = append(ints, streamClientInterceptors...)
 	}
-	if !replaceClientInterceptors {
+	if useCBClientInterceptors {
 		opentracingOpt := make([]grpc_opentracing.Option, 0)
 		for _, opt := range defaultOpts {
 			if opt == nil {
@@ -203,7 +203,7 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 	if len(streamServerInterceptors) > 0 {
 		ints = append(ints, streamServerInterceptors...)
 	}
-	if !replaceServerInterceptors {
+	if useCBServerInterceptors {
 		ints = append(ints,
 			ResponseTimeLoggingStreamInterceptor(),
 			grpc_ctxtags.StreamServerInterceptor(),
