@@ -69,7 +69,7 @@ func AddStreamServerInterceptor(ctx context.Context, i ...grpc.StreamServerInter
 
 // UseColdBrewServerInterceptors allows enabling/disabling coldbrew server interceptors
 //
-// when set to true, the coldbrew server interceptors will not used
+// when set to false, the coldbrew server interceptors will not be used
 func UseColdBrewServerInterceptors(ctx context.Context, flag bool) {
 	useCBServerInterceptors = flag
 }
@@ -86,7 +86,7 @@ func AddStreamClientInterceptor(ctx context.Context, i ...grpc.StreamClientInter
 
 // UseColdBrewClientInterceptors allows enabling/disabling coldbrew client interceptors
 //
-// when set to true, the coldbrew client interceptors will not used
+// when set to false, the coldbrew client interceptors will not be used
 func UseColdBrewClientInterceptors(ctx context.Context, flag bool) {
 	useCBClientInterceptors = flag
 }

@@ -285,7 +285,7 @@ func UseColdBrewClientInterceptors(ctx context.Context, flag bool)
 
 ### UseColdBrewClientInterceptors allows enabling/disabling coldbrew client interceptors
 
-when set to true\, the coldbrew client interceptors will not used
+when set to false\, the coldbrew client interceptors will not be used
 
 ## func [UseColdBrewServerInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L73>)
 
@@ -295,7 +295,7 @@ func UseColdBrewServerInterceptors(ctx context.Context, flag bool)
 
 ### UseColdBrewServerInterceptors allows enabling/disabling coldbrew server interceptors
 
-when set to true\, the coldbrew server interceptors will not used
+when set to false\, the coldbrew server interceptors will not be used
 
 ## type [FilterFunc](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L41>)
 
