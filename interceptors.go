@@ -34,7 +34,7 @@ var (
 	useCBServerInterceptors  = true
 	unaryClientInterceptors  = []grpc.UnaryClientInterceptor{}
 	streamClientInterceptors = []grpc.StreamClientInterceptor{}
-	useCBClientInterceptors  = false
+	useCBClientInterceptors  = true
 )
 
 // If it returns false, the given request will not be traced.
