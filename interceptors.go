@@ -162,10 +162,11 @@ func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInt
 				opentracingOpt = append(opentracingOpt, o)
 			}
 		}
-		ints = append(ints, grpc_retry.UnaryClientInterceptor(),
+		ints = append(ints,
+			HystrixClientInterceptor(hystrixOptions...),
+			grpc_retry.UnaryClientInterceptor(),
 			GRPCClientInterceptor(opentracingOpt...),
 			NewRelicClientInterceptor(),
-			HystrixClientInterceptor(hystrixOptions...),
 			grpc_prometheus.UnaryClientInterceptor,
 		)
 	}
