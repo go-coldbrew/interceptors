@@ -2,6 +2,7 @@ package interceptors
 
 import (
 	"context"
+	stdError "errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -356,7 +357,9 @@ func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientIn
 		}
 		newCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		return hystrix.Do(options.hystrixName, func() (err error) {
+
+		var invokerErr error
+		hystrixErr := hystrix.Do(options.hystrixName, func() (err error) {
 			defer func() {
 				if r := recover(); r != nil {
 					err = errors.Wrap(fmt.Errorf("Panic inside hystrix Method: %s, req: %v, reply: %v", method, req, reply), "Hystrix")
@@ -364,8 +367,18 @@ func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientIn
 				}
 			}()
 			defer notifier.NotifyOnPanic(newCtx, method)
-			return invoker(newCtx, method, req, reply, cc, opts...)
+			invokerErr = invoker(newCtx, method, req, reply, cc, opts...)
+			for _, excludedErr := range options.excludedErrors {
+				if stdError.Is(invokerErr, excludedErr) {
+					return nil
+				}
+			}
+			return invokerErr
 		}, nil)
+		if invokerErr != nil {
+			return invokerErr
+		}
+		return hystrixErr
 	}
 }
 
