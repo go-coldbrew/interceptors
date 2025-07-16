@@ -55,9 +55,7 @@ func WithHystrix() clientOption {
 func WithHystrixExcludedErrors(errors ...error) clientOption {
 	return &optionCarrier{
 		processor: func(co *clientOptions) {
-			if len(errors) > 0 {
-				co.excludedErrors = errors
-			}
+			co.excludedErrors = append(co.excludedErrors, errors...)
 		},
 	}
 }
