@@ -3,51 +3,55 @@
 [![GoDoc](https://img.shields.io/badge/pkg.go.dev-doc-blue)](http://pkg.go.dev/github.com/go-coldbrew/interceptors)
 [![Go Report Card](https://goreportcard.com/badge/github.com/go-coldbrew/interceptors)](https://goreportcard.com/report/github.com/go-coldbrew/interceptors)
 
+
+
 # interceptors
 
 ```go
 import "github.com/go-coldbrew/interceptors"
 ```
 
-### Package interceptors provides a common set of interceptors which are used in Coldbrew
+Package interceptors provides a common set of interceptors which are used in Coldbrew
 
-Almost all of these interceptors are reusable and can be used in any other project using grpc\.
+Almost all of these interceptors are reusable and can be used in any other project using grpc.
 
 ## Index
 
 - [Variables](<#variables>)
-- [func AddStreamClientInterceptor(ctx context.Context, i ...grpc.StreamClientInterceptor)](<#func-addstreamclientinterceptor>)
-- [func AddStreamServerInterceptor(ctx context.Context, i ...grpc.StreamServerInterceptor)](<#func-addstreamserverinterceptor>)
-- [func AddUnaryClientInterceptor(ctx context.Context, i ...grpc.UnaryClientInterceptor)](<#func-addunaryclientinterceptor>)
-- [func AddUnaryServerInterceptor(ctx context.Context, i ...grpc.UnaryServerInterceptor)](<#func-addunaryserverinterceptor>)
-- [func DebugLoggingInterceptor() grpc.UnaryServerInterceptor](<#func-debuglogginginterceptor>)
-- [func DefaultClientInterceptor(defaultOpts ...interface{}) grpc.UnaryClientInterceptor](<#func-defaultclientinterceptor>)
-- [func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInterceptor](<#func-defaultclientinterceptors>)
-- [func DefaultClientStreamInterceptor(defaultOpts ...interface{}) grpc.StreamClientInterceptor](<#func-defaultclientstreaminterceptor>)
-- [func DefaultClientStreamInterceptors(defaultOpts ...interface{}) []grpc.StreamClientInterceptor](<#func-defaultclientstreaminterceptors>)
-- [func DefaultInterceptors() []grpc.UnaryServerInterceptor](<#func-defaultinterceptors>)
-- [func DefaultStreamInterceptors() []grpc.StreamServerInterceptor](<#func-defaultstreaminterceptors>)
-- [func DoHTTPtoGRPC(ctx context.Context, svr interface{}, handler func(ctx context.Context, req interface{}) (interface{}, error), in interface{}) (interface{}, error)](<#func-dohttptogrpc>)
-- [func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool](<#func-filtermethodsfunc>)
-- [func GRPCClientInterceptor(options ...grpc_opentracing.Option) grpc.UnaryClientInterceptor](<#func-grpcclientinterceptor>)
-- [func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientInterceptor](<#func-hystrixclientinterceptor>)
-- [func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)](<#func-nrhttptracer>)
-- [func NewRelicClientInterceptor() grpc.UnaryClientInterceptor](<#func-newrelicclientinterceptor>)
-- [func NewRelicInterceptor() grpc.UnaryServerInterceptor](<#func-newrelicinterceptor>)
-- [func OptionsInterceptor() grpc.UnaryServerInterceptor](<#func-optionsinterceptor>)
-- [func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor](<#func-panicrecoveryinterceptor>)
-- [func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor](<#func-responsetimelogginginterceptor>)
-- [func ResponseTimeLoggingStreamInterceptor() grpc.StreamServerInterceptor](<#func-responsetimeloggingstreaminterceptor>)
-- [func ServerErrorInterceptor() grpc.UnaryServerInterceptor](<#func-servererrorinterceptor>)
-- [func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor](<#func-servererrorstreaminterceptor>)
-- [func SetFilterFunc(ctx context.Context, ff FilterFunc)](<#func-setfilterfunc>)
-- [func TraceIdInterceptor() grpc.UnaryServerInterceptor](<#func-traceidinterceptor>)
-- [func UseColdBrewClientInterceptors(ctx context.Context, flag bool)](<#func-usecoldbrewclientinterceptors>)
-- [func UseColdBrewServerInterceptors(ctx context.Context, flag bool)](<#func-usecoldbrewserverinterceptors>)
-- [type FilterFunc](<#type-filterfunc>)
+- [func AddStreamClientInterceptor\(ctx context.Context, i ...grpc.StreamClientInterceptor\)](<#AddStreamClientInterceptor>)
+- [func AddStreamServerInterceptor\(ctx context.Context, i ...grpc.StreamServerInterceptor\)](<#AddStreamServerInterceptor>)
+- [func AddUnaryClientInterceptor\(ctx context.Context, i ...grpc.UnaryClientInterceptor\)](<#AddUnaryClientInterceptor>)
+- [func AddUnaryServerInterceptor\(ctx context.Context, i ...grpc.UnaryServerInterceptor\)](<#AddUnaryServerInterceptor>)
+- [func DebugLoggingInterceptor\(\) grpc.UnaryServerInterceptor](<#DebugLoggingInterceptor>)
+- [func DefaultClientInterceptor\(defaultOpts ...interface\{\}\) grpc.UnaryClientInterceptor](<#DefaultClientInterceptor>)
+- [func DefaultClientInterceptors\(defaultOpts ...interface\{\}\) \[\]grpc.UnaryClientInterceptor](<#DefaultClientInterceptors>)
+- [func DefaultClientStreamInterceptor\(defaultOpts ...interface\{\}\) grpc.StreamClientInterceptor](<#DefaultClientStreamInterceptor>)
+- [func DefaultClientStreamInterceptors\(defaultOpts ...interface\{\}\) \[\]grpc.StreamClientInterceptor](<#DefaultClientStreamInterceptors>)
+- [func DefaultInterceptors\(\) \[\]grpc.UnaryServerInterceptor](<#DefaultInterceptors>)
+- [func DefaultStreamInterceptors\(\) \[\]grpc.StreamServerInterceptor](<#DefaultStreamInterceptors>)
+- [func DoHTTPtoGRPC\(ctx context.Context, svr interface\{\}, handler func\(ctx context.Context, req interface\{\}\) \(interface\{\}, error\), in interface\{\}\) \(interface\{\}, error\)](<#DoHTTPtoGRPC>)
+- [func FilterMethodsFunc\(ctx context.Context, fullMethodName string\) bool](<#FilterMethodsFunc>)
+- [func GRPCClientInterceptor\(options ...grpc\_opentracing.Option\) grpc.UnaryClientInterceptor](<#GRPCClientInterceptor>)
+- [func HystrixClientInterceptor\(defaultOpts ...grpc.CallOption\) grpc.UnaryClientInterceptor](<#HystrixClientInterceptor>)
+- [func NRHttpTracer\(pattern string, h http.HandlerFunc\) \(string, http.HandlerFunc\)](<#NRHttpTracer>)
+- [func NewRelicClientInterceptor\(\) grpc.UnaryClientInterceptor](<#NewRelicClientInterceptor>)
+- [func NewRelicInterceptor\(\) grpc.UnaryServerInterceptor](<#NewRelicInterceptor>)
+- [func OptionsInterceptor\(\) grpc.UnaryServerInterceptor](<#OptionsInterceptor>)
+- [func PanicRecoveryInterceptor\(\) grpc.UnaryServerInterceptor](<#PanicRecoveryInterceptor>)
+- [func ResponseTimeLoggingInterceptor\(ff FilterFunc\) grpc.UnaryServerInterceptor](<#ResponseTimeLoggingInterceptor>)
+- [func ResponseTimeLoggingStreamInterceptor\(\) grpc.StreamServerInterceptor](<#ResponseTimeLoggingStreamInterceptor>)
+- [func ServerErrorInterceptor\(\) grpc.UnaryServerInterceptor](<#ServerErrorInterceptor>)
+- [func ServerErrorStreamInterceptor\(\) grpc.StreamServerInterceptor](<#ServerErrorStreamInterceptor>)
+- [func SetFilterFunc\(ctx context.Context, ff FilterFunc\)](<#SetFilterFunc>)
+- [func TraceIdInterceptor\(\) grpc.UnaryServerInterceptor](<#TraceIdInterceptor>)
+- [func UseColdBrewClientInterceptors\(ctx context.Context, flag bool\)](<#UseColdBrewClientInterceptors>)
+- [func UseColdBrewServerInterceptors\(ctx context.Context, flag bool\)](<#UseColdBrewServerInterceptors>)
+- [type FilterFunc](<#FilterFunc>)
 
 
 ## Variables
+
+<a name="FilterMethods"></a>
 
 ```go
 var (
@@ -56,7 +60,8 @@ var (
 )
 ```
 
-## func [AddStreamClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L83>)
+<a name="AddStreamClientInterceptor"></a>
+## func [AddStreamClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L84>)
 
 ```go
 func AddStreamClientInterceptor(ctx context.Context, i ...grpc.StreamClientInterceptor)
@@ -64,7 +69,8 @@ func AddStreamClientInterceptor(ctx context.Context, i ...grpc.StreamClientInter
 
 AddStreamClientInterceptor adds a server interceptor to default server interceptors
 
-## func [AddStreamServerInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L66>)
+<a name="AddStreamServerInterceptor"></a>
+## func [AddStreamServerInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L67>)
 
 ```go
 func AddStreamServerInterceptor(ctx context.Context, i ...grpc.StreamServerInterceptor)
@@ -72,7 +78,8 @@ func AddStreamServerInterceptor(ctx context.Context, i ...grpc.StreamServerInter
 
 AddStreamServerInterceptor adds a server interceptor to default server interceptors
 
-## func [AddUnaryClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L78>)
+<a name="AddUnaryClientInterceptor"></a>
+## func [AddUnaryClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L79>)
 
 ```go
 func AddUnaryClientInterceptor(ctx context.Context, i ...grpc.UnaryClientInterceptor)
@@ -80,7 +87,8 @@ func AddUnaryClientInterceptor(ctx context.Context, i ...grpc.UnaryClientInterce
 
 AddUnaryClientInterceptor adds a server interceptor to default server interceptors
 
-## func [AddUnaryServerInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L61>)
+<a name="AddUnaryServerInterceptor"></a>
+## func [AddUnaryServerInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L62>)
 
 ```go
 func AddUnaryServerInterceptor(ctx context.Context, i ...grpc.UnaryServerInterceptor)
@@ -88,7 +96,8 @@ func AddUnaryServerInterceptor(ctx context.Context, i ...grpc.UnaryServerInterce
 
 AddUnaryServerInterceptor adds a server interceptor to default server interceptors
 
-## func [DebugLoggingInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L229>)
+<a name="DebugLoggingInterceptor"></a>
+## func [DebugLoggingInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L231>)
 
 ```go
 func DebugLoggingInterceptor() grpc.UnaryServerInterceptor
@@ -96,7 +105,8 @@ func DebugLoggingInterceptor() grpc.UnaryServerInterceptor
 
 DebugLoggingInterceptor is the interceptor that logs all request/response from a handler
 
-## func [DefaultClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L219>)
+<a name="DefaultClientInterceptor"></a>
+## func [DefaultClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L221>)
 
 ```go
 func DefaultClientInterceptor(defaultOpts ...interface{}) grpc.UnaryClientInterceptor
@@ -104,7 +114,8 @@ func DefaultClientInterceptor(defaultOpts ...interface{}) grpc.UnaryClientInterc
 
 DefaultClientInterceptor are the set of default interceptors that should be applied to all client calls
 
-## func [DefaultClientInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L146>)
+<a name="DefaultClientInterceptors"></a>
+## func [DefaultClientInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L147>)
 
 ```go
 func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInterceptor
@@ -112,7 +123,8 @@ func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInt
 
 DefaultClientInterceptors are the set of default interceptors that should be applied to all client calls
 
-## func [DefaultClientStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L224>)
+<a name="DefaultClientStreamInterceptor"></a>
+## func [DefaultClientStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L226>)
 
 ```go
 func DefaultClientStreamInterceptor(defaultOpts ...interface{}) grpc.StreamClientInterceptor
@@ -120,7 +132,8 @@ func DefaultClientStreamInterceptor(defaultOpts ...interface{}) grpc.StreamClien
 
 DefaultClientStreamInterceptor are the set of default interceptors that should be applied to all stream client calls
 
-## func [DefaultClientStreamInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L176>)
+<a name="DefaultClientStreamInterceptors"></a>
+## func [DefaultClientStreamInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L178>)
 
 ```go
 func DefaultClientStreamInterceptors(defaultOpts ...interface{}) []grpc.StreamClientInterceptor
@@ -128,7 +141,8 @@ func DefaultClientStreamInterceptors(defaultOpts ...interface{}) []grpc.StreamCl
 
 DefaultClientStreamInterceptors are the set of default interceptors that should be applied to all stream client calls
 
-## func [DefaultInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L125>)
+<a name="DefaultInterceptors"></a>
+## func [DefaultInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L126>)
 
 ```go
 func DefaultInterceptors() []grpc.UnaryServerInterceptor
@@ -136,7 +150,8 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor
 
 DefaultInterceptors are the set of default interceptors that are applied to all coldbrew methods
 
-## func [DefaultStreamInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L201>)
+<a name="DefaultStreamInterceptors"></a>
+## func [DefaultStreamInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L203>)
 
 ```go
 func DefaultStreamInterceptors() []grpc.StreamServerInterceptor
@@ -144,13 +159,14 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor
 
 DefaultStreamInterceptors are the set of default interceptors that should be applied to all coldbrew streams
 
-## func [DoHTTPtoGRPC](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L111>)
+<a name="DoHTTPtoGRPC"></a>
+## func [DoHTTPtoGRPC](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L112>)
 
 ```go
 func DoHTTPtoGRPC(ctx context.Context, svr interface{}, handler func(ctx context.Context, req interface{}) (interface{}, error), in interface{}) (interface{}, error)
 ```
 
-DoHTTPtoGRPC allows calling the interceptors when you use the Register\<svc\-name\>HandlerServer in grpc\-gateway\, see example below for reference
+DoHTTPtoGRPC allows calling the interceptors when you use the Register\<svc\-name\>HandlerServer in grpc\-gateway, see example below for reference
 
 ```
 func (s *svc) Echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
@@ -169,7 +185,8 @@ func (s *svc) echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResp
 }
 ```
 
-## func [FilterMethodsFunc](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L44>)
+<a name="FilterMethodsFunc"></a>
+## func [FilterMethodsFunc](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L45>)
 
 ```go
 func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool
@@ -177,7 +194,8 @@ func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool
 
 FilterMethodsFunc is the default implementation of Filter function
 
-## func [GRPCClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L328>)
+<a name="GRPCClientInterceptor"></a>
+## func [GRPCClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L330>)
 
 ```go
 func GRPCClientInterceptor(options ...grpc_opentracing.Option) grpc.UnaryClientInterceptor
@@ -185,7 +203,8 @@ func GRPCClientInterceptor(options ...grpc_opentracing.Option) grpc.UnaryClientI
 
 GRPCClientInterceptor is the interceptor that intercepts all cleint requests and adds tracing info to them
 
-## func [HystrixClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L333>)
+<a name="HystrixClientInterceptor"></a>
+## func [HystrixClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L335>)
 
 ```go
 func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientInterceptor
@@ -193,7 +212,8 @@ func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientIn
 
 HystrixClientInterceptor is the interceptor that intercepts all client requests and adds hystrix info to them
 
-## func [NRHttpTracer](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L404>)
+<a name="NRHttpTracer"></a>
+## func [NRHttpTracer](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L418>)
 
 ```go
 func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
@@ -201,7 +221,8 @@ func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
 
 NRHttpTracer adds newrelic tracing to this http function
 
-## func [NewRelicClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L317>)
+<a name="NewRelicClientInterceptor"></a>
+## func [NewRelicClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L319>)
 
 ```go
 func NewRelicClientInterceptor() grpc.UnaryClientInterceptor
@@ -209,7 +230,8 @@ func NewRelicClientInterceptor() grpc.UnaryClientInterceptor
 
 NewRelicClientInterceptor intercepts all client actions and reports them to newrelic
 
-## func [NewRelicInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L264>)
+<a name="NewRelicInterceptor"></a>
+## func [NewRelicInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L266>)
 
 ```go
 func NewRelicInterceptor() grpc.UnaryServerInterceptor
@@ -217,19 +239,26 @@ func NewRelicInterceptor() grpc.UnaryServerInterceptor
 
 NewRelicInterceptor intercepts all server actions and reports them to newrelic
 
-## func [OptionsInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L255>)
+<a name="OptionsInterceptor"></a>
+## func [OptionsInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L257>)
 
 ```go
 func OptionsInterceptor() grpc.UnaryServerInterceptor
 ```
 
-## func [PanicRecoveryInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L295>)
+
+
+<a name="PanicRecoveryInterceptor"></a>
+## func [PanicRecoveryInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L297>)
 
 ```go
 func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor
 ```
 
-## func [ResponseTimeLoggingInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L239>)
+
+
+<a name="ResponseTimeLoggingInterceptor"></a>
+## func [ResponseTimeLoggingInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L241>)
 
 ```go
 func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor
@@ -237,15 +266,17 @@ func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor
 
 ResponseTimeLoggingInterceptor logs response time for each request on server
 
-## func [ResponseTimeLoggingStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L372>)
+<a name="ResponseTimeLoggingStreamInterceptor"></a>
+## func [ResponseTimeLoggingStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L386>)
 
 ```go
 func ResponseTimeLoggingStreamInterceptor() grpc.StreamServerInterceptor
 ```
 
-ResponseTimeLoggingStreamInterceptor logs response time for stream RPCs\.
+ResponseTimeLoggingStreamInterceptor logs response time for stream RPCs.
 
-## func [ServerErrorInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L276>)
+<a name="ServerErrorInterceptor"></a>
+## func [ServerErrorInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L278>)
 
 ```go
 func ServerErrorInterceptor() grpc.UnaryServerInterceptor
@@ -253,15 +284,17 @@ func ServerErrorInterceptor() grpc.UnaryServerInterceptor
 
 ServerErrorInterceptor intercepts all server actions and reports them to error notifier
 
-## func [ServerErrorStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L384>)
+<a name="ServerErrorStreamInterceptor"></a>
+## func [ServerErrorStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L398>)
 
 ```go
 func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor
 ```
 
-ServerErrorStreamInterceptor intercepts server errors for stream RPCs and reports them to the error notifier\.
+ServerErrorStreamInterceptor intercepts server errors for stream RPCs and reports them to the error notifier.
 
-## func [SetFilterFunc](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L54>)
+<a name="SetFilterFunc"></a>
+## func [SetFilterFunc](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L55>)
 
 ```go
 func SetFilterFunc(ctx context.Context, ff FilterFunc)
@@ -269,7 +302,8 @@ func SetFilterFunc(ctx context.Context, ff FilterFunc)
 
 SetFilterFunc sets the default filter function to be used by interceptors
 
-## func [TraceIdInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L426>)
+<a name="TraceIdInterceptor"></a>
+## func [TraceIdInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L440>)
 
 ```go
 func TraceIdInterceptor() grpc.UnaryServerInterceptor
@@ -277,34 +311,35 @@ func TraceIdInterceptor() grpc.UnaryServerInterceptor
 
 TraceIdInterceptor allows injecting trace id from request objects
 
-## func [UseColdBrewClientInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L90>)
+<a name="UseColdBrewClientInterceptors"></a>
+## func [UseColdBrewClientInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L91>)
 
 ```go
 func UseColdBrewClientInterceptors(ctx context.Context, flag bool)
 ```
 
-### UseColdBrewClientInterceptors allows enabling/disabling coldbrew client interceptors
+UseColdBrewClientInterceptors allows enabling/disabling coldbrew client interceptors
 
-when set to false\, the coldbrew client interceptors will not be used
+when set to false, the coldbrew client interceptors will not be used
 
-## func [UseColdBrewServerInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L73>)
+<a name="UseColdBrewServerInterceptors"></a>
+## func [UseColdBrewServerInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L74>)
 
 ```go
 func UseColdBrewServerInterceptors(ctx context.Context, flag bool)
 ```
 
-### UseColdBrewServerInterceptors allows enabling/disabling coldbrew server interceptors
+UseColdBrewServerInterceptors allows enabling/disabling coldbrew server interceptors
 
-when set to false\, the coldbrew server interceptors will not be used
+when set to false, the coldbrew server interceptors will not be used
 
-## type [FilterFunc](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L41>)
+<a name="FilterFunc"></a>
+## type [FilterFunc](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L42>)
 
-If it returns false\, the given request will not be traced\.
+If it returns false, the given request will not be traced.
 
 ```go
 type FilterFunc func(ctx context.Context, fullMethodName string) bool
 ```
-
-
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

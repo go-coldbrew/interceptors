@@ -10,6 +10,7 @@ type clientOption interface {
 type clientOptions struct {
 	hystrixName    string
 	disableHystrix bool
+	excludedErrors []error
 }
 
 type optionCarrier struct {
@@ -46,6 +47,15 @@ func WithHystrix() clientOption {
 	return &optionCarrier{
 		processor: func(co *clientOptions) {
 			co.disableHystrix = false
+		},
+	}
+}
+
+// WithHystrixExcludedErrors sets the errors that should be excluded from hystrix circuit breaker
+func WithHystrixExcludedErrors(errors ...error) clientOption {
+	return &optionCarrier{
+		processor: func(co *clientOptions) {
+			co.excludedErrors = append(co.excludedErrors, errors...)
 		},
 	}
 }
