@@ -65,10 +65,10 @@ func WithHystrixExcludedErrors(errors ...error) clientOption {
 }
 
 // WithHystrixExcludedCodes sets the gRPC codes that should be excluded from hystrix circuit breaker
-func WithHystrixExcludedCodes(codes ...codes.Code) clientOption {
+func WithHystrixExcludedCodes(grpcCodes ...codes.Code) clientOption {
 	return &optionCarrier{
 		processor: func(co *clientOptions) {
-			co.excludedCodes = append(co.excludedCodes, codes...)
+			co.excludedCodes = append(co.excludedCodes, grpcCodes...)
 		},
 	}
 }
