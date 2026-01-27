@@ -1,6 +1,9 @@
 package interceptors
 
-import "google.golang.org/grpc"
+import (
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+)
 
 type clientOption interface {
 	grpc.CallOption
@@ -11,6 +14,7 @@ type clientOptions struct {
 	hystrixName    string
 	disableHystrix bool
 	excludedErrors []error
+	excludedCodes  []codes.Code
 }
 
 type optionCarrier struct {
@@ -22,7 +26,7 @@ func (h *optionCarrier) process(co *clientOptions) {
 	h.processor(co)
 }
 
-//WithHystrixName changes the hystrix name to be used in the client interceptors
+// WithHystrixName changes the hystrix name to be used in the client interceptors
 func WithHystrixName(name string) clientOption {
 	return &optionCarrier{
 		processor: func(co *clientOptions) {
@@ -56,6 +60,15 @@ func WithHystrixExcludedErrors(errors ...error) clientOption {
 	return &optionCarrier{
 		processor: func(co *clientOptions) {
 			co.excludedErrors = append(co.excludedErrors, errors...)
+		},
+	}
+}
+
+// WithHystrixExcludedCodes sets the gRPC codes that should be excluded from hystrix circuit breaker
+func WithHystrixExcludedCodes(codes ...codes.Code) clientOption {
+	return &optionCarrier{
+		processor: func(co *clientOptions) {
+			co.excludedCodes = append(co.excludedCodes, codes...)
 		},
 	}
 }
