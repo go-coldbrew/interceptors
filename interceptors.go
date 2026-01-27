@@ -332,7 +332,11 @@ func GRPCClientInterceptor(options ...grpc_opentracing.Option) grpc.UnaryClientI
 	return grpc_opentracing.UnaryClientInterceptor(options...)
 }
 
-// HystrixClientInterceptor is the interceptor that intercepts all client requests and adds hystrix info to them
+// HystrixClientInterceptor returns a unary client interceptor that executes the RPC inside a Hystrix command.
+// 
+// The interceptor applies provided default and per-call client options to configure Hystrix behavior (for example the command name, disabled flag, excluded errors, and excluded gRPC status codes).
+// If Hystrix is disabled via options, the RPC is invoked directly. If the underlying RPC returns an error that matches any configured excluded error or whose gRPC status code matches any configured excluded code, Hystrix fallback is skipped and the RPC error is returned.
+// Panics raised during the RPC invocation are captured and reported to the notifier before being converted into an error. If the RPC itself returns an error, that error is returned; otherwise any error produced by Hystrix is returned.
 func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		options := clientOptions{

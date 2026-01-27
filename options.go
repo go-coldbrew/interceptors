@@ -26,7 +26,8 @@ func (h *optionCarrier) process(co *clientOptions) {
 	h.processor(co)
 }
 
-// WithHystrixName changes the hystrix name to be used in the client interceptors
+// WithHystrixName creates a clientOption that sets the Hystrix command name used by client interceptors.
+// If name is empty, the existing Hystrix name is left unchanged.
 func WithHystrixName(name string) clientOption {
 	return &optionCarrier{
 		processor: func(co *clientOptions) {
@@ -55,7 +56,8 @@ func WithHystrix() clientOption {
 	}
 }
 
-// WithHystrixExcludedErrors sets the errors that should be excluded from hystrix circuit breaker
+// WithHystrixExcludedErrors returns a clientOption that adds the provided errors to the list of errors
+// excluded from the Hystrix circuit breaker.
 func WithHystrixExcludedErrors(errors ...error) clientOption {
 	return &optionCarrier{
 		processor: func(co *clientOptions) {
@@ -64,11 +66,11 @@ func WithHystrixExcludedErrors(errors ...error) clientOption {
 	}
 }
 
-// WithHystrixExcludedCodes sets the gRPC codes that should be excluded from hystrix circuit breaker
-func WithHystrixExcludedCodes(grpcCodes ...codes.Code) clientOption {
+// WithHystrixExcludedCodes returns a clientOption that appends the provided gRPC codes to the list of codes excluded from the Hystrix circuit breaker.
+func WithHystrixExcludedCodes(codes ...codes.Code) clientOption {
 	return &optionCarrier{
 		processor: func(co *clientOptions) {
-			co.excludedCodes = append(co.excludedCodes, grpcCodes...)
+			co.excludedCodes = append(co.excludedCodes, codes...)
 		},
 	}
 }
