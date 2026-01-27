@@ -24,6 +24,7 @@ import (
 	"github.com/newrelic/go-agent/v3/integrations/nrgrpc"
 	newrelic "github.com/newrelic/go-agent/v3/newrelic"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -371,6 +372,13 @@ func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientIn
 			for _, excludedErr := range options.excludedErrors {
 				if stdError.Is(invokerErr, excludedErr) {
 					return nil
+				}
+			}
+			if st, ok := status.FromError(invokerErr); ok {
+				for _, code := range options.excludedCodes {
+					if st.Code() == code {
+						return nil
+					}
 				}
 			}
 			return invokerErr
