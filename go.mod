@@ -5,9 +5,9 @@ go 1.25.0
 require (
 	github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5
 	github.com/go-coldbrew/errors v0.2.1
-	github.com/go-coldbrew/log v0.2.4
-	github.com/go-coldbrew/options v0.2.3
-	github.com/go-coldbrew/tracing v0.0.6
+	github.com/go-coldbrew/log v0.2.5
+	github.com/go-coldbrew/options v0.2.4
+	github.com/go-coldbrew/tracing v0.0.7
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0

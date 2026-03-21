@@ -1,3 +1,8 @@
+// Package interceptors provides gRPC server and client interceptors for the ColdBrew framework.
+//
+// Interceptor configuration functions (AddUnaryServerInterceptor, SetFilterFunc, etc.)
+// must be called during program initialization, before the gRPC server starts.
+// They are not safe for concurrent use.
 package interceptors
 
 import (
@@ -52,43 +57,48 @@ func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool {
 	return true
 }
 
-// SetFilterFunc sets the default filter function to be used by interceptors
+// SetFilterFunc sets the default filter function to be used by interceptors.
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
 func SetFilterFunc(ctx context.Context, ff FilterFunc) {
 	if ff != nil {
 		defaultFilterFunc = ff
 	}
 }
 
-// AddUnaryServerInterceptor adds a server interceptor to default server interceptors
+// AddUnaryServerInterceptor adds a server interceptor to default server interceptors.
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
 func AddUnaryServerInterceptor(ctx context.Context, i ...grpc.UnaryServerInterceptor) {
 	unaryServerInterceptors = append(unaryServerInterceptors, i...)
 }
 
-// AddStreamServerInterceptor adds a server interceptor to default server interceptors
+// AddStreamServerInterceptor adds a server interceptor to default server interceptors.
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
 func AddStreamServerInterceptor(ctx context.Context, i ...grpc.StreamServerInterceptor) {
 	streamServerInterceptors = append(streamServerInterceptors, i...)
 }
 
-// UseColdBrewServerInterceptors allows enabling/disabling coldbrew server interceptors
-//
-// when set to false, the coldbrew server interceptors will not be used
+// UseColdBrewServerInterceptors allows enabling/disabling coldbrew server interceptors.
+// When set to false, the coldbrew server interceptors will not be used.
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
 func UseColdBrewServerInterceptors(ctx context.Context, flag bool) {
 	useCBServerInterceptors = flag
 }
 
-// AddUnaryClientInterceptor adds a server interceptor to default server interceptors
+// AddUnaryClientInterceptor adds a client interceptor to default client interceptors.
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
 func AddUnaryClientInterceptor(ctx context.Context, i ...grpc.UnaryClientInterceptor) {
 	unaryClientInterceptors = append(unaryClientInterceptors, i...)
 }
 
-// AddStreamClientInterceptor adds a server interceptor to default server interceptors
+// AddStreamClientInterceptor adds a client stream interceptor to default client stream interceptors.
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
 func AddStreamClientInterceptor(ctx context.Context, i ...grpc.StreamClientInterceptor) {
 	streamClientInterceptors = append(streamClientInterceptors, i...)
 }
 
-// UseColdBrewClientInterceptors allows enabling/disabling coldbrew client interceptors
-//
-// when set to false, the coldbrew client interceptors will not be used
+// UseColdBrewClientInterceptors allows enabling/disabling coldbrew client interceptors.
+// When set to false, the coldbrew client interceptors will not be used.
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
 func UseColdBrewClientInterceptors(ctx context.Context, flag bool) {
 	useCBClientInterceptors = flag
 }
@@ -231,7 +241,7 @@ func DefaultClientStreamInterceptor(defaultOpts ...interface{}) grpc.StreamClien
 // DebugLoggingInterceptor is the interceptor that logs all request/response from a handler
 func DebugLoggingInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		log.Debug(ctx, "method", info.FullMethod, "requst", req)
+		log.Debug(ctx, "method", info.FullMethod, "request", req)
 		resp, err := handler(ctx, req)
 		log.Debug(ctx, "method", info.FullMethod, "response", resp, "err", err)
 		return resp, err
@@ -289,7 +299,7 @@ func ServerErrorInterceptor() grpc.UnaryServerInterceptor {
 		}
 		resp, err = handler(ctx, req)
 		if defaultFilterFunc(ctx, info.FullMethod) {
-			go notifier.Notify(err, ctx)
+			go func() { _ = notifier.Notify(err, ctx) }()
 		}
 		return resp, err
 	}
@@ -307,7 +317,7 @@ func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor {
 					err = errors.New(fmt.Sprintf("panic: %s", r))
 				}
 				nrutil.FinishNRTransaction(ctx, err)
-				notifier.NotifyWithLevel(err, "critical", info.FullMethod, ctx)
+				_ = notifier.NotifyWithLevel(err, "critical", info.FullMethod, ctx)
 			}
 		}(ctx)
 
@@ -333,7 +343,10 @@ func GRPCClientInterceptor(options ...grpc_opentracing.Option) grpc.UnaryClientI
 }
 
 // HystrixClientInterceptor returns a unary client interceptor that executes the RPC inside a Hystrix command.
-// 
+//
+// Note: This interceptor wraps github.com/afex/hystrix-go which has been unmaintained since 2018.
+// Consider migrating to github.com/failsafe-go/failsafe-go for circuit breaker functionality.
+//
 // The interceptor applies provided default and per-call client options to configure Hystrix behavior (for example the command name, disabled flag, excluded errors, and excluded gRPC status codes).
 // If Hystrix is disabled via options, the RPC is invoked directly. If the underlying RPC returns an error that matches any configured excluded error or whose gRPC status code matches any configured excluded code, Hystrix fallback is skipped and the RPC error is returned.
 // Panics raised during the RPC invocation are captured and reported to the notifier before being converted into an error. If the RPC itself returns an error, that error is returned; otherwise any error produced by Hystrix is returned.
@@ -367,7 +380,7 @@ func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientIn
 		hystrixErr := hystrix.Do(options.hystrixName, func() (err error) {
 			defer func() {
 				if r := recover(); r != nil {
-					err = errors.Wrap(fmt.Errorf("Panic inside hystrix Method: %s, req: %v, reply: %v", method, req, reply), "Hystrix")
+					err = errors.Wrap(fmt.Errorf("panic inside hystrix method: %s, req: %v, reply: %v", method, req, reply), "Hystrix")
 					log.Error(ctx, "panic", r, "method", method, "req", req, "reply", reply)
 				}
 			}()
@@ -419,7 +432,7 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 		}
 		err = handler(srv, stream)
 		if defaultFilterFunc(ctx, info.FullMethod) {
-			go notifier.Notify(err, ctx)
+			go func() { _ = notifier.Notify(err, ctx) }()
 		}
 		return err
 
