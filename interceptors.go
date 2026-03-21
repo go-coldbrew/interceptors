@@ -85,20 +85,20 @@ func UseColdBrewServerInterceptors(ctx context.Context, flag bool) {
 }
 
 // AddUnaryClientInterceptor adds a client interceptor to default client interceptors.
-// Must be called during initialization, before the server starts. Not safe for concurrent use.
+// Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
 func AddUnaryClientInterceptor(ctx context.Context, i ...grpc.UnaryClientInterceptor) {
 	unaryClientInterceptors = append(unaryClientInterceptors, i...)
 }
 
 // AddStreamClientInterceptor adds a client stream interceptor to default client stream interceptors.
-// Must be called during initialization, before the server starts. Not safe for concurrent use.
+// Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
 func AddStreamClientInterceptor(ctx context.Context, i ...grpc.StreamClientInterceptor) {
 	streamClientInterceptors = append(streamClientInterceptors, i...)
 }
 
 // UseColdBrewClientInterceptors allows enabling/disabling coldbrew client interceptors.
 // When set to false, the coldbrew client interceptors will not be used.
-// Must be called during initialization, before the server starts. Not safe for concurrent use.
+// Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
 func UseColdBrewClientInterceptors(ctx context.Context, flag bool) {
 	useCBClientInterceptors = flag
 }
