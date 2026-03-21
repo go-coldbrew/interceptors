@@ -3,8 +3,10 @@ package interceptors
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 )
 
@@ -232,7 +234,8 @@ func TestDoHTTPtoGRPC(t *testing.T) {
 		t.Errorf("expected 'result', got %v", resp)
 	}
 
-	// With a user interceptor, verify the chain is applied when RPCMethod is present.
+	// With a user interceptor but still no RPCMethod in context,
+	// the interceptor chain should NOT be invoked.
 	handlerCalled = false
 	interceptorCalled := false
 	AddUnaryServerInterceptor(ctx, func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
@@ -240,11 +243,6 @@ func TestDoHTTPtoGRPC(t *testing.T) {
 		return handler(ctx, req)
 	})
 
-	// Simulate RPCMethod context using grpc-gateway's runtime.AnnotateIncomingContext indirectly.
-	// Since runtime.RPCMethod reads from context metadata, we can set it via the runtime helpers.
-	// However, the simplest way is to use runtime.WithRPCMethod if available; if not,
-	// we test the no-RPCMethod path which is already covered above.
-	// Without RPCMethod, interceptor chain is not invoked.
 	handlerCalled = false
 	interceptorCalled = false
 	resp, err = DoHTTPtoGRPC(ctx, nil, handler, "input")
@@ -256,6 +254,29 @@ func TestDoHTTPtoGRPC(t *testing.T) {
 	}
 	if interceptorCalled {
 		t.Error("interceptor should not be called without RPCMethod context")
+	}
+
+	// With RPCMethod set in context, the interceptor chain should be invoked.
+	handlerCalled = false
+	interceptorCalled = false
+	req, _ := http.NewRequest("GET", "http://localhost/test", nil)
+	mux := runtime.NewServeMux()
+	ctxWithRPC, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/test.Service/Method")
+	if err != nil {
+		t.Fatalf("AnnotateIncomingContext: %v", err)
+	}
+	resp, err = DoHTTPtoGRPC(ctxWithRPC, nil, handler, "input")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !handlerCalled {
+		t.Error("handler should be called when RPCMethod is present")
+	}
+	if !interceptorCalled {
+		t.Error("interceptor should be called when RPCMethod is present")
+	}
+	if resp != "result" {
+		t.Errorf("expected 'result', got %v", resp)
 	}
 }
 
