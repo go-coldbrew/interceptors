@@ -262,6 +262,7 @@ func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		ctx = options.AddToOptions(ctx, "", "")
 		ctx = loggers.AddToLogContext(ctx, "", "")
+		ctx = loggers.AddToLogContext(ctx, "grpcMethod", info.FullMethod)
 		defer func(ctx context.Context, method string, begin time.Time) {
 			if ff != nil && !ff(ctx, method) {
 				return
@@ -272,7 +273,6 @@ func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor {
 			}
 			log.GetLogger().Log(ctx, responseTimeLogLevel, 1, logArgs...)
 		}(ctx, info.FullMethod, time.Now())
-		ctx = loggers.AddToLogContext(ctx, "grpcMethod", info.FullMethod)
 		resp, err = handler(ctx, req)
 		return resp, err
 	}
@@ -452,9 +452,13 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 			t.Set("trace", traceID)
 			ctx = loggers.AddToLogContext(ctx, "trace", traceID)
 		}
+		start := time.Now()
 		err = handler(srv, stream)
 		if defaultFilterFunc(ctx, info.FullMethod) {
-			_ = notifier.NotifyAsync(err, ctx, notifier.Tags{"grpcMethod": info.FullMethod})
+			_ = notifier.NotifyAsync(err, ctx, notifier.Tags{
+				"grpcMethod": info.FullMethod,
+				"duration":   time.Since(start).String(),
+			})
 		}
 		return err
 
