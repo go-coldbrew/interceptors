@@ -4,8 +4,8 @@ go 1.25.0
 
 require (
 	github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5
-	github.com/go-coldbrew/errors v0.2.1
-	github.com/go-coldbrew/log v0.2.5
+	github.com/go-coldbrew/errors v0.2.2
+	github.com/go-coldbrew/log v0.2.6
 	github.com/go-coldbrew/options v0.2.4
 	github.com/go-coldbrew/tracing v0.0.7
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
@@ -27,12 +27,14 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/newrelic/csec-go-agent v1.6.0 // indirect
+	github.com/nxadm/tail v1.4.11 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
+	github.com/smartystreets/goconvey v1.8.1 // indirect
 	github.com/stvp/rollbar v0.5.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/arch v0.25.0 // indirect
