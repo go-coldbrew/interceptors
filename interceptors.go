@@ -10,6 +10,7 @@ import (
 	stdError "errors"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -42,15 +43,23 @@ var (
 	unaryClientInterceptors  = []grpc.UnaryClientInterceptor{}
 	streamClientInterceptors = []grpc.StreamClientInterceptor{}
 	useCBClientInterceptors  = true
+	responseTimeLogLevel     loggers.Level = loggers.InfoLevel
 )
+
+// SetResponseTimeLogLevel sets the log level for response time logging.
+// Default is InfoLevel. Must be called during initialization, before the server starts.
+func SetResponseTimeLogLevel(level loggers.Level) {
+	responseTimeLogLevel = level
+}
 
 // If it returns false, the given request will not be traced.
 type FilterFunc func(ctx context.Context, fullMethodName string) bool
 
 // FilterMethodsFunc is the default implementation of Filter function
 func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool {
+	lowerMethod := strings.ToLower(fullMethodName)
 	for _, name := range FilterMethods {
-		if strings.Contains(strings.ToLower(fullMethodName), name) {
+		if strings.Contains(lowerMethod, name) {
 			return false
 		}
 	}
@@ -257,7 +266,11 @@ func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor {
 			if ff != nil && !ff(ctx, method) {
 				return
 			}
-			log.Info(ctx, "error", err, "took", time.Since(begin))
+			logArgs := []any{"error", err, "took", time.Since(begin)}
+			if err != nil {
+				logArgs = append(logArgs, "grpcCode", status.Code(err))
+			}
+			log.GetLogger().Log(ctx, responseTimeLogLevel, 1, logArgs...)
 		}(ctx, info.FullMethod, time.Now())
 		ctx = loggers.AddToLogContext(ctx, "grpcMethod", info.FullMethod)
 		resp, err = handler(ctx, req)
@@ -297,9 +310,13 @@ func ServerErrorInterceptor() grpc.UnaryServerInterceptor {
 			t.Set("trace", traceID)
 			ctx = loggers.AddToLogContext(ctx, "trace", traceID)
 		}
+		start := time.Now()
 		resp, err = handler(ctx, req)
 		if defaultFilterFunc(ctx, info.FullMethod) {
-			go func() { _ = notifier.Notify(err, ctx) }()
+			_ = notifier.NotifyAsync(err, ctx, notifier.Tags{
+				"grpcMethod": info.FullMethod,
+				"duration":   time.Since(start).String(),
+			})
 		}
 		return resp, err
 	}
@@ -310,14 +327,15 @@ func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor {
 		defer func(ctx context.Context) {
 			// panic handler
 			if r := recover(); r != nil {
-				log.Error(ctx, "panic", r, "method", info.FullMethod)
+				stack := string(debug.Stack())
+				log.Error(ctx, "panic", r, "method", info.FullMethod, "stack", stack)
 				if e, ok := r.(error); ok {
 					err = e
 				} else {
 					err = errors.New(fmt.Sprintf("panic: %s", r))
 				}
 				nrutil.FinishNRTransaction(ctx, err)
-				_ = notifier.NotifyWithLevel(err, "critical", info.FullMethod, ctx)
+				_ = notifier.NotifyWithLevel(err, "critical", info.FullMethod, ctx, stack)
 			}
 		}(ctx)
 
@@ -432,7 +450,7 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 		}
 		err = handler(srv, stream)
 		if defaultFilterFunc(ctx, info.FullMethod) {
-			go func() { _ = notifier.Notify(err, ctx) }()
+			_ = notifier.NotifyAsync(err, ctx, notifier.Tags{"grpcMethod": info.FullMethod})
 		}
 		return err
 
@@ -467,9 +485,9 @@ func TraceIdInterceptor() grpc.UnaryServerInterceptor {
 		if req != nil {
 			// fetch and update trace id from request
 			if r, ok := req.(interface{ GetTraceId() string }); ok {
-				notifier.UpdateTraceId(ctx, r.GetTraceId())
+				ctx = notifier.UpdateTraceId(ctx, r.GetTraceId())
 			} else if r, ok := req.(interface{ GetTraceID() string }); ok {
-				notifier.UpdateTraceId(ctx, r.GetTraceID())
+				ctx = notifier.UpdateTraceId(ctx, r.GetTraceID())
 			}
 		}
 		return handler(ctx, req)
