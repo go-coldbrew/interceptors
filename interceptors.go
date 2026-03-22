@@ -47,8 +47,8 @@ var (
 )
 
 // SetResponseTimeLogLevel sets the log level for response time logging.
-// Default is InfoLevel. Must be called during initialization, before the server starts.
-func SetResponseTimeLogLevel(level loggers.Level) {
+// Default is InfoLevel. Must be called during initialization, before the server starts. Not safe for concurrent use.
+func SetResponseTimeLogLevel(ctx context.Context, level loggers.Level) {
 	responseTimeLogLevel = level
 }
 
@@ -429,7 +429,11 @@ func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientIn
 func ResponseTimeLoggingStreamInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 		defer func(begin time.Time) {
-			log.Info(stream.Context(), "method", info.FullMethod, "error", err, "took", time.Since(begin))
+			logArgs := []any{"method", info.FullMethod, "error", err, "took", time.Since(begin)}
+			if err != nil {
+				logArgs = append(logArgs, "grpcCode", status.Code(err))
+			}
+			log.GetLogger().Log(stream.Context(), responseTimeLogLevel, 1, logArgs...)
 		}(time.Now())
 		err = handler(srv, stream)
 		return err

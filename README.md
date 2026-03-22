@@ -11,10 +11,6 @@
 import "github.com/go-coldbrew/interceptors"
 ```
 
-Package interceptors provides a common set of interceptors which are used in Coldbrew
-
-Almost all of these interceptors are reusable and can be used in any other project using grpc.
-
 Package interceptors provides gRPC server and client interceptors for the ColdBrew framework.
 
 Interceptor configuration functions \(AddUnaryServerInterceptor, SetFilterFunc, etc.\) must be called during program initialization, before the gRPC server starts. They are not safe for concurrent use.
@@ -47,7 +43,7 @@ Interceptor configuration functions \(AddUnaryServerInterceptor, SetFilterFunc, 
 - [func ServerErrorInterceptor\(\) grpc.UnaryServerInterceptor](<#ServerErrorInterceptor>)
 - [func ServerErrorStreamInterceptor\(\) grpc.StreamServerInterceptor](<#ServerErrorStreamInterceptor>)
 - [func SetFilterFunc\(ctx context.Context, ff FilterFunc\)](<#SetFilterFunc>)
-- [func SetResponseTimeLogLevel\(level loggers.Level\)](<#SetResponseTimeLogLevel>)
+- [func SetResponseTimeLogLevel\(ctx context.Context, level loggers.Level\)](<#SetResponseTimeLogLevel>)
 - [func TraceIdInterceptor\(\) grpc.UnaryServerInterceptor](<#TraceIdInterceptor>)
 - [func UseColdBrewClientInterceptors\(ctx context.Context, flag bool\)](<#UseColdBrewClientInterceptors>)
 - [func UseColdBrewServerInterceptors\(ctx context.Context, flag bool\)](<#UseColdBrewServerInterceptors>)
@@ -222,7 +218,7 @@ Note: This interceptor wraps github.com/afex/hystrix\-go which has been unmainta
 The interceptor applies provided default and per\-call client options to configure Hystrix behavior \(for example the command name, disabled flag, excluded errors, and excluded gRPC status codes\). If Hystrix is disabled via options, the RPC is invoked directly. If the underlying RPC returns an error that matches any configured excluded error or whose gRPC status code matches any configured excluded code, Hystrix fallback is skipped and the RPC error is returned. Panics raised during the RPC invocation are captured and reported to the notifier before being converted into an error. If the RPC itself returns an error, that error is returned; otherwise any error produced by Hystrix is returned.
 
 <a name="NRHttpTracer"></a>
-## func [NRHttpTracer](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L461>)
+## func [NRHttpTracer](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L465>)
 
 ```go
 func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
@@ -294,7 +290,7 @@ func ServerErrorInterceptor() grpc.UnaryServerInterceptor
 ServerErrorInterceptor intercepts all server actions and reports them to error notifier
 
 <a name="ServerErrorStreamInterceptor"></a>
-## func [ServerErrorStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L441>)
+## func [ServerErrorStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L445>)
 
 ```go
 func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor
@@ -315,13 +311,13 @@ SetFilterFunc sets the default filter function to be used by interceptors. Must 
 ## func [SetResponseTimeLogLevel](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L51>)
 
 ```go
-func SetResponseTimeLogLevel(level loggers.Level)
+func SetResponseTimeLogLevel(ctx context.Context, level loggers.Level)
 ```
 
-SetResponseTimeLogLevel sets the log level for response time logging. Default is InfoLevel. Must be called during initialization, before the server starts.
+SetResponseTimeLogLevel sets the log level for response time logging. Default is InfoLevel. Must be called during initialization, before the server starts. Not safe for concurrent use.
 
 <a name="TraceIdInterceptor"></a>
-## func [TraceIdInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L483>)
+## func [TraceIdInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L487>)
 
 ```go
 func TraceIdInterceptor() grpc.UnaryServerInterceptor
