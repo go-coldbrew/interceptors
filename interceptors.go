@@ -315,7 +315,7 @@ func ServerErrorInterceptor() grpc.UnaryServerInterceptor {
 		if err != nil && defaultFilterFunc(ctx, info.FullMethod) {
 			_ = notifier.NotifyAsync(err, ctx, notifier.Tags{
 				"grpcMethod": info.FullMethod,
-				"duration":   time.Since(start).String(),
+				"duration":   time.Since(start).Truncate(time.Millisecond).String(),
 			})
 		}
 		return resp, err
@@ -457,7 +457,7 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 		if err != nil && defaultFilterFunc(ctx, info.FullMethod) {
 			_ = notifier.NotifyAsync(err, ctx, notifier.Tags{
 				"grpcMethod": info.FullMethod,
-				"duration":   time.Since(start).String(),
+				"duration":   time.Since(start).Truncate(time.Millisecond).String(),
 			})
 		}
 		return err
