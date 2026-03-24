@@ -22,11 +22,9 @@ import (
 	"github.com/go-coldbrew/log/loggers"
 	"github.com/go-coldbrew/options"
 	nrutil "github.com/go-coldbrew/tracing/newrelic"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
+	grpcprom "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/newrelic/go-agent/v3/integrations/nrgrpc"
 	newrelic "github.com/newrelic/go-agent/v3/newrelic"
@@ -45,7 +43,26 @@ var (
 	streamClientInterceptors = []grpc.StreamClientInterceptor{}
 	useCBClientInterceptors  = true
 	responseTimeLogLevel     loggers.Level = loggers.InfoLevel
+
+	srvMetrics = grpcprom.NewServerMetrics()
+	cltMetrics = grpcprom.NewClientMetrics()
 )
+
+// EnablePrometheusHandlingTimeHistogram re-creates the server metrics with handling time histogram enabled.
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
+func EnablePrometheusHandlingTimeHistogram(buckets []float64) {
+	if len(buckets) > 0 {
+		srvMetrics = grpcprom.NewServerMetrics(
+			grpcprom.WithServerHandlingTimeHistogram(
+				grpcprom.WithHistogramBuckets(buckets),
+			),
+		)
+	} else {
+		srvMetrics = grpcprom.NewServerMetrics(
+			grpcprom.WithServerHandlingTimeHistogram(),
+		)
+	}
+}
 
 // SetResponseTimeLogLevel sets the log level for response time logging.
 // Default is InfoLevel. Must be called during initialization, before the server starts. Not safe for concurrent use.
@@ -139,7 +156,7 @@ var (
 
 func getHTTPtoGRPCInterceptor() grpc.UnaryServerInterceptor {
 	httpToGRPCOnce.Do(func() {
-		httpToGRPCInterceptor = grpc_middleware.ChainUnaryServer(DefaultInterceptors()...)
+		httpToGRPCInterceptor = chainUnaryServer(DefaultInterceptors())
 	})
 	return httpToGRPCInterceptor
 }
@@ -167,9 +184,8 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 		ints = append(ints,
 			ResponseTimeLoggingInterceptor(defaultFilterFunc),
 			TraceIdInterceptor(),
-			grpc_ctxtags.UnaryServerInterceptor(),
 			grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithFilterFunc(defaultFilterFunc)),
-			grpc_prometheus.UnaryServerInterceptor,
+			srvMetrics.UnaryServerInterceptor(),
 			ServerErrorInterceptor(),
 			NewRelicInterceptor(),
 			PanicRecoveryInterceptor(),
@@ -203,7 +219,7 @@ func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInt
 			grpc_retry.UnaryClientInterceptor(),
 			GRPCClientInterceptor(opentracingOpt...),
 			NewRelicClientInterceptor(),
-			grpc_prometheus.UnaryClientInterceptor,
+			cltMetrics.UnaryClientInterceptor(),
 		)
 	}
 	return ints
@@ -228,7 +244,7 @@ func DefaultClientStreamInterceptors(defaultOpts ...interface{}) []grpc.StreamCl
 		ints = append(ints,
 			grpc_opentracing.StreamClientInterceptor(opentracingOpt...),
 			nrgrpc.StreamClientInterceptor,
-			grpc_prometheus.StreamClientInterceptor,
+			cltMetrics.StreamClientInterceptor(),
 		)
 	}
 	return ints
@@ -243,9 +259,8 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 	if useCBServerInterceptors {
 		ints = append(ints,
 			ResponseTimeLoggingStreamInterceptor(),
-			grpc_ctxtags.StreamServerInterceptor(),
 			grpc_opentracing.StreamServerInterceptor(),
-			grpc_prometheus.StreamServerInterceptor,
+			srvMetrics.StreamServerInterceptor(),
 			ServerErrorStreamInterceptor(),
 		)
 	}
@@ -254,12 +269,12 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 
 // DefaultClientInterceptor are the set of default interceptors that should be applied to all client calls
 func DefaultClientInterceptor(defaultOpts ...interface{}) grpc.UnaryClientInterceptor {
-	return grpc_middleware.ChainUnaryClient(DefaultClientInterceptors(defaultOpts...)...)
+	return chainUnaryClient(DefaultClientInterceptors(defaultOpts...))
 }
 
 // DefaultClientStreamInterceptor are the set of default interceptors that should be applied to all stream client calls
 func DefaultClientStreamInterceptor(defaultOpts ...interface{}) grpc.StreamClientInterceptor {
-	return grpc_middleware.ChainStreamClient(DefaultClientStreamInterceptors(defaultOpts...)...)
+	return chainStreamClient(DefaultClientStreamInterceptors(defaultOpts...))
 }
 
 // DebugLoggingInterceptor is the interceptor that logs all request/response from a handler
@@ -319,12 +334,8 @@ func ServerErrorInterceptor() grpc.UnaryServerInterceptor {
 		// set trace id if not set
 		ctx = notifier.SetTraceId(ctx)
 
-		t := grpc_ctxtags.Extract(ctx)
-		if t != nil {
-			traceID := notifier.GetTraceId(ctx)
-			t.Set("trace", traceID)
-			ctx = loggers.AddToLogContext(ctx, "trace", traceID)
-		}
+		traceID := notifier.GetTraceId(ctx)
+		ctx = loggers.AddToLogContext(ctx, "trace", traceID)
 		start := time.Now()
 		resp, err = handler(ctx, req)
 		if err != nil && defaultFilterFunc(ctx, info.FullMethod) {
@@ -461,12 +472,8 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 		ctx := stream.Context()
 		ctx = notifier.SetTraceId(ctx)
-		t := grpc_ctxtags.Extract(ctx)
-		if t != nil {
-			traceID := notifier.GetTraceId(ctx)
-			t.Set("trace", traceID)
-			ctx = loggers.AddToLogContext(ctx, "trace", traceID)
-		}
+		traceID := notifier.GetTraceId(ctx)
+		ctx = loggers.AddToLogContext(ctx, "trace", traceID)
 		start := time.Now()
 		err = handler(srv, stream)
 		if err != nil && defaultFilterFunc(ctx, info.FullMethod) {
@@ -514,5 +521,77 @@ func TraceIdInterceptor() grpc.UnaryServerInterceptor {
 			}
 		}
 		return handler(ctx, req)
+	}
+}
+
+// chainUnaryServer chains multiple unary server interceptors into a single interceptor.
+func chainUnaryServer(interceptors []grpc.UnaryServerInterceptor) grpc.UnaryServerInterceptor {
+	switch len(interceptors) {
+	case 0:
+		return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+			return handler(ctx, req)
+		}
+	case 1:
+		return interceptors[0]
+	default:
+		return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+			currHandler := handler
+			for i := len(interceptors) - 1; i > 0; i-- {
+				innerHandler := currHandler
+				interceptor := interceptors[i]
+				currHandler = func(currentCtx context.Context, currentReq interface{}) (interface{}, error) {
+					return interceptor(currentCtx, currentReq, info, innerHandler)
+				}
+			}
+			return interceptors[0](ctx, req, info, currHandler)
+		}
+	}
+}
+
+// chainUnaryClient chains multiple unary client interceptors into a single interceptor.
+func chainUnaryClient(interceptors []grpc.UnaryClientInterceptor) grpc.UnaryClientInterceptor {
+	switch len(interceptors) {
+	case 0:
+		return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}
+	case 1:
+		return interceptors[0]
+	default:
+		return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			currInvoker := invoker
+			for i := len(interceptors) - 1; i > 0; i-- {
+				innerInvoker := currInvoker
+				interceptor := interceptors[i]
+				currInvoker = func(currentCtx context.Context, currentMethod string, currentReq, currentReply interface{}, currentConn *grpc.ClientConn, currentOpts ...grpc.CallOption) error {
+					return interceptor(currentCtx, currentMethod, currentReq, currentReply, currentConn, innerInvoker, currentOpts...)
+				}
+			}
+			return interceptors[0](ctx, method, req, reply, cc, currInvoker, opts...)
+		}
+	}
+}
+
+// chainStreamClient chains multiple stream client interceptors into a single interceptor.
+func chainStreamClient(interceptors []grpc.StreamClientInterceptor) grpc.StreamClientInterceptor {
+	switch len(interceptors) {
+	case 0:
+		return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+			return streamer(ctx, desc, cc, method, opts...)
+		}
+	case 1:
+		return interceptors[0]
+	default:
+		return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+			currStreamer := streamer
+			for i := len(interceptors) - 1; i > 0; i-- {
+				innerStreamer := currStreamer
+				interceptor := interceptors[i]
+				currStreamer = func(currentCtx context.Context, currentDesc *grpc.StreamDesc, currentConn *grpc.ClientConn, currentMethod string, currentOpts ...grpc.CallOption) (grpc.ClientStream, error) {
+					return interceptor(currentCtx, currentDesc, currentConn, currentMethod, innerStreamer, currentOpts...)
+				}
+			}
+			return interceptors[0](ctx, desc, cc, method, currStreamer, opts...)
+		}
 	}
 }
