@@ -26,6 +26,7 @@ import (
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 	grpcprom "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/newrelic/go-agent/v3/integrations/nrgrpc"
 	newrelic "github.com/newrelic/go-agent/v3/newrelic"
 	"google.golang.org/grpc"
@@ -44,15 +45,27 @@ var (
 	useCBClientInterceptors  = true
 	responseTimeLogLevel     loggers.Level = loggers.InfoLevel
 
-	srvMetrics            = grpcprom.NewServerMetrics()
-	cltMetrics            = grpcprom.NewClientMetrics()
-	srvInterceptorOpts    []grpcprom.Option
-	cltInterceptorOpts    []grpcprom.Option
+	srvMetrics         = grpcprom.NewServerMetrics()
+	cltMetrics         = grpcprom.NewClientMetrics()
+	srvInterceptorOpts []grpcprom.Option
+	cltInterceptorOpts []grpcprom.Option
 )
+
+func init() {
+	prometheus.MustRegister(srvMetrics)
+	prometheus.MustRegister(cltMetrics)
+}
+
+// registerMetrics unregisters old metrics and registers new ones with the default Prometheus registerer.
+func registerMetrics(old, new prometheus.Collector) {
+	prometheus.Unregister(old)
+	prometheus.MustRegister(new)
+}
 
 // EnablePrometheusHandlingTimeHistogram re-creates the server metrics with handling time histogram enabled.
 // Must be called during initialization, before the server starts. Not safe for concurrent use.
 func EnablePrometheusHandlingTimeHistogram(buckets []float64) {
+	old := srvMetrics
 	if len(buckets) > 0 {
 		srvMetrics = grpcprom.NewServerMetrics(
 			grpcprom.WithServerHandlingTimeHistogram(
@@ -64,6 +77,7 @@ func EnablePrometheusHandlingTimeHistogram(buckets []float64) {
 			grpcprom.WithServerHandlingTimeHistogram(),
 		)
 	}
+	registerMetrics(old, srvMetrics)
 }
 
 // SetServerInterceptorOptions sets options applied to server-side Prometheus gRPC interceptors
@@ -82,17 +96,21 @@ func SetClientInterceptorOptions(opts ...grpcprom.Option) {
 }
 
 // SetServerMetrics sets custom server metrics for gRPC Prometheus instrumentation.
+// The new metrics are automatically registered with the default Prometheus registerer.
 // Must be called during initialization, before the server starts. Not safe for concurrent use.
 func SetServerMetrics(m *grpcprom.ServerMetrics) {
 	if m != nil {
+		registerMetrics(srvMetrics, m)
 		srvMetrics = m
 	}
 }
 
 // SetClientMetrics sets custom client metrics for gRPC Prometheus instrumentation.
+// The new metrics are automatically registered with the default Prometheus registerer.
 // Must be called during initialization, before the server starts. Not safe for concurrent use.
 func SetClientMetrics(m *grpcprom.ClientMetrics) {
 	if m != nil {
+		registerMetrics(cltMetrics, m)
 		cltMetrics = m
 	}
 }
