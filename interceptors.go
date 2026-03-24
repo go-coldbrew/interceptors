@@ -44,8 +44,10 @@ var (
 	useCBClientInterceptors  = true
 	responseTimeLogLevel     loggers.Level = loggers.InfoLevel
 
-	srvMetrics = grpcprom.NewServerMetrics()
-	cltMetrics = grpcprom.NewClientMetrics()
+	srvMetrics            = grpcprom.NewServerMetrics()
+	cltMetrics            = grpcprom.NewClientMetrics()
+	srvInterceptorOpts    []grpcprom.Option
+	cltInterceptorOpts    []grpcprom.Option
 )
 
 // EnablePrometheusHandlingTimeHistogram re-creates the server metrics with handling time histogram enabled.
@@ -62,6 +64,47 @@ func EnablePrometheusHandlingTimeHistogram(buckets []float64) {
 			grpcprom.WithServerHandlingTimeHistogram(),
 		)
 	}
+}
+
+// SetServerInterceptorOptions sets options applied to server-side Prometheus gRPC interceptors
+// (e.g. WithExemplarFromContext, WithLabelsFromContext).
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
+func SetServerInterceptorOptions(opts ...grpcprom.Option) {
+	srvInterceptorOpts = opts
+}
+
+// SetClientInterceptorOptions sets options applied to client-side Prometheus gRPC interceptors
+// (e.g. WithExemplarFromContext).
+// Note: WithLabelsFromContext is a no-op for client interceptors in the current provider version.
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
+func SetClientInterceptorOptions(opts ...grpcprom.Option) {
+	cltInterceptorOpts = opts
+}
+
+// SetServerMetrics sets custom server metrics for gRPC Prometheus instrumentation.
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
+func SetServerMetrics(m *grpcprom.ServerMetrics) {
+	if m != nil {
+		srvMetrics = m
+	}
+}
+
+// SetClientMetrics sets custom client metrics for gRPC Prometheus instrumentation.
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
+func SetClientMetrics(m *grpcprom.ClientMetrics) {
+	if m != nil {
+		cltMetrics = m
+	}
+}
+
+// GetServerMetrics returns the current server metrics instance.
+func GetServerMetrics() *grpcprom.ServerMetrics {
+	return srvMetrics
+}
+
+// GetClientMetrics returns the current client metrics instance.
+func GetClientMetrics() *grpcprom.ClientMetrics {
+	return cltMetrics
 }
 
 // SetResponseTimeLogLevel sets the log level for response time logging.
@@ -185,7 +228,7 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 			ResponseTimeLoggingInterceptor(defaultFilterFunc),
 			TraceIdInterceptor(),
 			grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithFilterFunc(defaultFilterFunc)),
-			srvMetrics.UnaryServerInterceptor(),
+			srvMetrics.UnaryServerInterceptor(srvInterceptorOpts...),
 			ServerErrorInterceptor(),
 			NewRelicInterceptor(),
 			PanicRecoveryInterceptor(),
@@ -219,7 +262,7 @@ func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInt
 			grpc_retry.UnaryClientInterceptor(),
 			GRPCClientInterceptor(opentracingOpt...),
 			NewRelicClientInterceptor(),
-			cltMetrics.UnaryClientInterceptor(),
+			cltMetrics.UnaryClientInterceptor(cltInterceptorOpts...),
 		)
 	}
 	return ints
@@ -244,7 +287,7 @@ func DefaultClientStreamInterceptors(defaultOpts ...interface{}) []grpc.StreamCl
 		ints = append(ints,
 			grpc_opentracing.StreamClientInterceptor(opentracingOpt...),
 			nrgrpc.StreamClientInterceptor,
-			cltMetrics.StreamClientInterceptor(),
+			cltMetrics.StreamClientInterceptor(cltInterceptorOpts...),
 		)
 	}
 	return ints
@@ -260,7 +303,7 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 		ints = append(ints,
 			ResponseTimeLoggingStreamInterceptor(),
 			grpc_opentracing.StreamServerInterceptor(),
-			srvMetrics.StreamServerInterceptor(),
+			srvMetrics.StreamServerInterceptor(srvInterceptorOpts...),
 			ServerErrorStreamInterceptor(),
 		)
 	}
@@ -524,8 +567,43 @@ func TraceIdInterceptor() grpc.UnaryServerInterceptor {
 	}
 }
 
+// filterNilServerInterceptors returns a new slice with nil entries removed.
+func filterNilServerInterceptors(s []grpc.UnaryServerInterceptor) []grpc.UnaryServerInterceptor {
+	out := make([]grpc.UnaryServerInterceptor, 0, len(s))
+	for _, v := range s {
+		if v != nil {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// filterNilClientInterceptors returns a new slice with nil entries removed.
+func filterNilClientInterceptors(s []grpc.UnaryClientInterceptor) []grpc.UnaryClientInterceptor {
+	out := make([]grpc.UnaryClientInterceptor, 0, len(s))
+	for _, v := range s {
+		if v != nil {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// filterNilStreamClientInterceptors returns a new slice with nil entries removed.
+func filterNilStreamClientInterceptors(s []grpc.StreamClientInterceptor) []grpc.StreamClientInterceptor {
+	out := make([]grpc.StreamClientInterceptor, 0, len(s))
+	for _, v := range s {
+		if v != nil {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // chainUnaryServer chains multiple unary server interceptors into a single interceptor.
+// Nil interceptors are filtered out.
 func chainUnaryServer(interceptors []grpc.UnaryServerInterceptor) grpc.UnaryServerInterceptor {
+	interceptors = filterNilServerInterceptors(interceptors)
 	switch len(interceptors) {
 	case 0:
 		return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
@@ -549,7 +627,9 @@ func chainUnaryServer(interceptors []grpc.UnaryServerInterceptor) grpc.UnaryServ
 }
 
 // chainUnaryClient chains multiple unary client interceptors into a single interceptor.
+// Nil interceptors are filtered out.
 func chainUnaryClient(interceptors []grpc.UnaryClientInterceptor) grpc.UnaryClientInterceptor {
+	interceptors = filterNilClientInterceptors(interceptors)
 	switch len(interceptors) {
 	case 0:
 		return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
@@ -573,7 +653,9 @@ func chainUnaryClient(interceptors []grpc.UnaryClientInterceptor) grpc.UnaryClie
 }
 
 // chainStreamClient chains multiple stream client interceptors into a single interceptor.
+// Nil interceptors are filtered out.
 func chainStreamClient(interceptors []grpc.StreamClientInterceptor) grpc.StreamClientInterceptor {
+	interceptors = filterNilStreamClientInterceptors(interceptors)
 	switch len(interceptors) {
 	case 0:
 		return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
