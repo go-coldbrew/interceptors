@@ -24,6 +24,7 @@ import (
 	nrutil "github.com/go-coldbrew/tracing/newrelic"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	grpcprom "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
+	"github.com/prometheus/client_golang/prometheus"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/newrelic/go-agent/v3/integrations/nrgrpc"
@@ -132,6 +133,9 @@ func SetClientMetricsOptions(opts ...grpcprom.ClientMetricsOption) {
 func getServerMetrics() *grpcprom.ServerMetrics {
 	srvMetricsOnce.Do(func() {
 		srvMetrics = grpcprom.NewServerMetrics(srvMetricsOpts...)
+		if err := prometheus.Register(srvMetrics); err != nil {
+			log.Warn(context.Background(), "msg", "failed to register gRPC server metrics with Prometheus", "err", err)
+		}
 	})
 	return srvMetrics
 }
@@ -139,6 +143,9 @@ func getServerMetrics() *grpcprom.ServerMetrics {
 func getClientMetrics() *grpcprom.ClientMetrics {
 	cltMetricsOnce.Do(func() {
 		cltMetrics = grpcprom.NewClientMetrics(cltMetricsOpts...)
+		if err := prometheus.Register(cltMetrics); err != nil {
+			log.Warn(context.Background(), "msg", "failed to register gRPC client metrics with Prometheus", "err", err)
+		}
 	})
 	return cltMetrics
 }
@@ -146,45 +153,51 @@ func getClientMetrics() *grpcprom.ClientMetrics {
 // chainUnaryServer chains multiple unary server interceptors into one.
 func chainUnaryServer(interceptors []grpc.UnaryServerInterceptor) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		chain := handler
-		for i := len(interceptors) - 1; i >= 0; i-- {
-			next := chain
-			interceptor := interceptors[i]
-			chain = func(ctx context.Context, req interface{}) (interface{}, error) {
-				return interceptor(ctx, req, info, next)
+		var i int
+		var next grpc.UnaryHandler
+		next = func(ctx context.Context, req interface{}) (interface{}, error) {
+			if i == len(interceptors) {
+				return handler(ctx, req)
 			}
+			interceptor := interceptors[i]
+			i++
+			return interceptor(ctx, req, info, next)
 		}
-		return chain(ctx, req)
+		return next(ctx, req)
 	}
 }
 
 // chainUnaryClient chains multiple unary client interceptors into one.
 func chainUnaryClient(interceptors []grpc.UnaryClientInterceptor) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-		chain := invoker
-		for i := len(interceptors) - 1; i >= 0; i-- {
-			next := chain
-			interceptor := interceptors[i]
-			chain = func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
-				return interceptor(ctx, method, req, reply, cc, next, opts...)
+		var i int
+		var next grpc.UnaryInvoker
+		next = func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+			if i == len(interceptors) {
+				return invoker(ctx, method, req, reply, cc, opts...)
 			}
+			interceptor := interceptors[i]
+			i++
+			return interceptor(ctx, method, req, reply, cc, next, opts...)
 		}
-		return chain(ctx, method, req, reply, cc, opts...)
+		return next(ctx, method, req, reply, cc, opts...)
 	}
 }
 
 // chainStreamClient chains multiple stream client interceptors into one.
 func chainStreamClient(interceptors []grpc.StreamClientInterceptor) grpc.StreamClientInterceptor {
 	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-		chain := streamer
-		for i := len(interceptors) - 1; i >= 0; i-- {
-			next := chain
-			interceptor := interceptors[i]
-			chain = func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-				return interceptor(ctx, desc, cc, method, next, opts...)
+		var i int
+		var next grpc.Streamer
+		next = func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+			if i == len(interceptors) {
+				return streamer(ctx, desc, cc, method, opts...)
 			}
+			interceptor := interceptors[i]
+			i++
+			return interceptor(ctx, desc, cc, method, next, opts...)
 		}
-		return chain(ctx, desc, cc, method, opts...)
+		return next(ctx, desc, cc, method, opts...)
 	}
 }
 

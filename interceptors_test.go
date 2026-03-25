@@ -317,3 +317,94 @@ func TestHystrixClientInterceptor(t *testing.T) {
 		}
 	})
 }
+
+func TestChainUnaryServer(t *testing.T) {
+	var order []int
+	makeInterceptor := func(id int) grpc.UnaryServerInterceptor {
+		return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+			order = append(order, id)
+			return handler(ctx, req)
+		}
+	}
+
+	chain := chainUnaryServer([]grpc.UnaryServerInterceptor{
+		makeInterceptor(1),
+		makeInterceptor(2),
+		makeInterceptor(3),
+	})
+
+	info := &grpc.UnaryServerInfo{FullMethod: "/test/Chain"}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		order = append(order, 0) // handler marker
+		return "ok", nil
+	}
+
+	resp, err := chain(context.Background(), nil, info, handler)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp != "ok" {
+		t.Errorf("expected 'ok', got %v", resp)
+	}
+	if len(order) != 4 || order[0] != 1 || order[1] != 2 || order[2] != 3 || order[3] != 0 {
+		t.Errorf("expected execution order [1 2 3 0], got %v", order)
+	}
+}
+
+func TestChainUnaryClient(t *testing.T) {
+	var order []int
+	makeInterceptor := func(id int) grpc.UnaryClientInterceptor {
+		return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			order = append(order, id)
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}
+	}
+
+	chain := chainUnaryClient([]grpc.UnaryClientInterceptor{
+		makeInterceptor(1),
+		makeInterceptor(2),
+		makeInterceptor(3),
+	})
+
+	invoker := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		order = append(order, 0)
+		return nil
+	}
+
+	err := chain(context.Background(), "/test/Chain", nil, nil, nil, invoker)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(order) != 4 || order[0] != 1 || order[1] != 2 || order[2] != 3 || order[3] != 0 {
+		t.Errorf("expected execution order [1 2 3 0], got %v", order)
+	}
+}
+
+func TestChainStreamClient(t *testing.T) {
+	var order []int
+	makeInterceptor := func(id int) grpc.StreamClientInterceptor {
+		return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+			order = append(order, id)
+			return streamer(ctx, desc, cc, method, opts...)
+		}
+	}
+
+	chain := chainStreamClient([]grpc.StreamClientInterceptor{
+		makeInterceptor(1),
+		makeInterceptor(2),
+		makeInterceptor(3),
+	})
+
+	streamer := func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		order = append(order, 0)
+		return nil, nil
+	}
+
+	_, err := chain(context.Background(), nil, nil, "/test/Chain", streamer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(order) != 4 || order[0] != 1 || order[1] != 2 || order[2] != 3 || order[3] != 0 {
+		t.Errorf("expected execution order [1 2 3 0], got %v", order)
+	}
+}
