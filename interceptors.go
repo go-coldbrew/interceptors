@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/afex/hystrix-go/hystrix"
@@ -112,8 +113,10 @@ func UseColdBrewClientInterceptors(ctx context.Context, flag bool) {
 	useCBClientInterceptors = flag
 }
 
-// DoHTTPtoGRPC allows calling the interceptors when you use the Register<svc-name>HandlerServer in grpc-gateway,
-// see example below for reference
+// DoHTTPtoGRPC allows calling the interceptors when you use the Register<svc-name>HandlerServer in grpc-gateway.
+// The interceptor chain is cached on first invocation. All interceptor configuration
+// (AddUnaryServerInterceptor, SetFilterFunc, etc.) must be finalized before the first call.
+// See example below for reference
 //
 //	func (s *svc) Echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
 //	    handler := func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -129,10 +132,22 @@ func UseColdBrewClientInterceptors(ctx context.Context, flag bool) {
 //	func (s *svc) echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
 //	       .... implementation ....
 //	}
+var (
+	httpToGRPCOnce        sync.Once
+	httpToGRPCInterceptor grpc.UnaryServerInterceptor
+)
+
+func getHTTPtoGRPCInterceptor() grpc.UnaryServerInterceptor {
+	httpToGRPCOnce.Do(func() {
+		httpToGRPCInterceptor = grpc_middleware.ChainUnaryServer(DefaultInterceptors()...)
+	})
+	return httpToGRPCInterceptor
+}
+
 func DoHTTPtoGRPC(ctx context.Context, svr interface{}, handler func(ctx context.Context, req interface{}) (interface{}, error), in interface{}) (interface{}, error) {
 	method, ok := runtime.RPCMethod(ctx)
 	if ok {
-		interceptor := grpc_middleware.ChainUnaryServer(DefaultInterceptors()...)
+		interceptor := getHTTPtoGRPCInterceptor()
 		info := &grpc.UnaryServerInfo{
 			Server:     svr,
 			FullMethod: method,
