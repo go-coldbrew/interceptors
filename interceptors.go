@@ -130,12 +130,26 @@ func SetClientMetricsOptions(opts ...grpcprom.ClientMetricsOption) {
 	cltMetricsOpts = append(cltMetricsOpts, opts...)
 }
 
+func registerCollector(c prometheus.Collector) {
+	if err := prometheus.Register(c); err != nil {
+		// If a collector with the same metrics is already registered (e.g. from
+		// the deprecated go-grpc-prometheus package's init()), replace it with ours
+		// so the interceptors' metrics instance is the one being scraped.
+		if are, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			prometheus.Unregister(are.ExistingCollector)
+			if err := prometheus.Register(c); err != nil {
+				log.Warn(context.Background(), "msg", "failed to re-register gRPC metrics with Prometheus after unregistering old collector", "err", err)
+			}
+		} else {
+			log.Warn(context.Background(), "msg", "failed to register gRPC metrics with Prometheus", "err", err)
+		}
+	}
+}
+
 func getServerMetrics() *grpcprom.ServerMetrics {
 	srvMetricsOnce.Do(func() {
 		srvMetrics = grpcprom.NewServerMetrics(srvMetricsOpts...)
-		if err := prometheus.Register(srvMetrics); err != nil {
-			log.Warn(context.Background(), "msg", "failed to register gRPC server metrics with Prometheus", "err", err)
-		}
+		registerCollector(srvMetrics)
 	})
 	return srvMetrics
 }
@@ -143,9 +157,7 @@ func getServerMetrics() *grpcprom.ServerMetrics {
 func getClientMetrics() *grpcprom.ClientMetrics {
 	cltMetricsOnce.Do(func() {
 		cltMetrics = grpcprom.NewClientMetrics(cltMetricsOpts...)
-		if err := prometheus.Register(cltMetrics); err != nil {
-			log.Warn(context.Background(), "msg", "failed to register gRPC client metrics with Prometheus", "err", err)
-		}
+		registerCollector(cltMetrics)
 	})
 	return cltMetrics
 }
