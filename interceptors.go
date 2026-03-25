@@ -57,9 +57,9 @@ func init() {
 }
 
 // registerMetrics unregisters old metrics and registers new ones with the default Prometheus registerer.
-func registerMetrics(old, new prometheus.Collector) {
+func registerMetrics(old, replacement prometheus.Collector) {
 	prometheus.Unregister(old)
-	prometheus.MustRegister(new)
+	prometheus.MustRegister(replacement)
 }
 
 // EnablePrometheusHandlingTimeHistogram re-creates the server metrics with handling time histogram enabled.
