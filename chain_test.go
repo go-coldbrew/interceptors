@@ -90,11 +90,16 @@ func TestChainUnaryClientOrder(t *testing.T) {
 
 func TestChainUnaryClientNilFiltered(t *testing.T) {
 	chain := chainUnaryClient([]grpc.UnaryClientInterceptor{nil, nil})
+	invokerCalled := false
 	err := chain(context.Background(), "/test", nil, nil, nil, func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		invokerCalled = true
 		return nil
 	})
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
+	}
+	if !invokerCalled {
+		t.Error("expected invoker to be called when all interceptors are nil")
 	}
 }
 

@@ -237,7 +237,7 @@ Note: This interceptor wraps github.com/afex/hystrix\-go which has been unmainta
 The interceptor applies provided default and per\-call client options to configure Hystrix behavior \(for example the command name, disabled flag, excluded errors, and excluded gRPC status codes\). If Hystrix is disabled via options, the RPC is invoked directly. If the underlying RPC returns an error that matches any configured excluded error or whose gRPC status code matches any configured excluded code, Hystrix fallback is skipped and the RPC error is returned. Panics raised during the RPC invocation are captured and reported to the notifier before being converted into an error. If the RPC itself returns an error, that error is returned; otherwise any error produced by Hystrix is returned.
 
 <a name="NRHttpTracer"></a>
-## func [NRHttpTracer](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L552>)
+## func [NRHttpTracer](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L567>)
 
 ```go
 func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
@@ -291,7 +291,7 @@ func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor
 ResponseTimeLoggingInterceptor logs response time for each request on server
 
 <a name="ResponseTimeLoggingStreamInterceptor"></a>
-## func [ResponseTimeLoggingStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L516>)
+## func [ResponseTimeLoggingStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L527>)
 
 ```go
 func ResponseTimeLoggingStreamInterceptor() grpc.StreamServerInterceptor
@@ -309,7 +309,7 @@ func ServerErrorInterceptor() grpc.UnaryServerInterceptor
 ServerErrorInterceptor intercepts all server actions and reports them to error notifier
 
 <a name="ServerErrorStreamInterceptor"></a>
-## func [ServerErrorStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L532>)
+## func [ServerErrorStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L547>)
 
 ```go
 func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor
@@ -324,7 +324,7 @@ ServerErrorStreamInterceptor intercepts server errors for stream RPCs and report
 func SetClientInterceptorOptions(opts ...grpcprom.Option)
 ```
 
-SetClientInterceptorOptions sets options applied to client\-side Prometheus gRPC interceptors \(e.g. WithExemplarFromContext\). Note: WithLabelsFromContext is a no\-op for client interceptors in the current provider version. Must be called during initialization, before the server starts. Not safe for concurrent use.
+SetClientInterceptorOptions sets options applied to client\-side Prometheus gRPC interceptors \(e.g. WithExemplarFromContext\). Note: WithLabelsFromContext is a no\-op for client interceptors in the current provider version. Must be called during initialization, before the first client RPC. Not safe for concurrent use.
 
 <a name="SetClientMetrics"></a>
 ## func [SetClientMetrics](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L111>)
@@ -360,7 +360,7 @@ SetResponseTimeLogLevel sets the log level for response time logging. Default is
 func SetServerInterceptorOptions(opts ...grpcprom.Option)
 ```
 
-SetServerInterceptorOptions sets options applied to server\-side Prometheus gRPC interceptors \(e.g. WithExemplarFromContext, WithLabelsFromContext\). Must be called during initialization, before the server starts. Not safe for concurrent use.
+SetServerInterceptorOptions sets options applied to server\-side Prometheus gRPC interceptors \(e.g. WithExemplarFromContext, WithLabelsFromContext\). Must be called during initialization, before the server starts serving. Not safe for concurrent use.
 
 <a name="SetServerMetrics"></a>
 ## func [SetServerMetrics](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L101>)
@@ -372,7 +372,7 @@ func SetServerMetrics(m *grpcprom.ServerMetrics)
 SetServerMetrics sets custom server metrics for gRPC Prometheus instrumentation. The new metrics are automatically registered with the default Prometheus registerer. Must be called during initialization, before the server starts. Not safe for concurrent use.
 
 <a name="TraceIdInterceptor"></a>
-## func [TraceIdInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L574>)
+## func [TraceIdInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L589>)
 
 ```go
 func TraceIdInterceptor() grpc.UnaryServerInterceptor

@@ -82,7 +82,7 @@ func EnablePrometheusHandlingTimeHistogram(buckets []float64) {
 
 // SetServerInterceptorOptions sets options applied to server-side Prometheus gRPC interceptors
 // (e.g. WithExemplarFromContext, WithLabelsFromContext).
-// Must be called during initialization, before the server starts. Not safe for concurrent use.
+// Must be called during initialization, before the server starts serving. Not safe for concurrent use.
 func SetServerInterceptorOptions(opts ...grpcprom.Option) {
 	srvInterceptorOpts = opts
 }
@@ -90,7 +90,7 @@ func SetServerInterceptorOptions(opts ...grpcprom.Option) {
 // SetClientInterceptorOptions sets options applied to client-side Prometheus gRPC interceptors
 // (e.g. WithExemplarFromContext).
 // Note: WithLabelsFromContext is a no-op for client interceptors in the current provider version.
-// Must be called during initialization, before the server starts. Not safe for concurrent use.
+// Must be called during initialization, before the first client RPC. Not safe for concurrent use.
 func SetClientInterceptorOptions(opts ...grpcprom.Option) {
 	cltInterceptorOpts = opts
 }
@@ -512,17 +512,32 @@ func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientIn
 	}
 }
 
+// wrappedServerStream embeds grpc.ServerStream and overrides Context()
+// to return a derived context with additional values (e.g. trace ID, log fields).
+type wrappedServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (w *wrappedServerStream) Context() context.Context {
+	return w.ctx
+}
+
 // ResponseTimeLoggingStreamInterceptor logs response time for stream RPCs.
 func ResponseTimeLoggingStreamInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
+		ctx := stream.Context()
+		ctx = options.AddToOptions(ctx, "", "")
+		ctx = loggers.AddToLogContext(ctx, "", "")
+		ctx = loggers.AddToLogContext(ctx, "grpcMethod", info.FullMethod)
 		defer func(begin time.Time) {
 			logArgs := []any{"method", info.FullMethod, "error", err, "took", time.Since(begin)}
 			if err != nil {
 				logArgs = append(logArgs, "grpcCode", status.Code(err))
 			}
-			log.GetLogger().Log(stream.Context(), responseTimeLogLevel, 1, logArgs...)
+			log.GetLogger().Log(ctx, responseTimeLogLevel, 1, logArgs...)
 		}(time.Now())
-		err = handler(srv, stream)
+		err = handler(srv, &wrappedServerStream{ServerStream: stream, ctx: ctx})
 		return err
 	}
 }
@@ -536,7 +551,7 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 		traceID := notifier.GetTraceId(ctx)
 		ctx = loggers.AddToLogContext(ctx, "trace", traceID)
 		start := time.Now()
-		err = handler(srv, stream)
+		err = handler(srv, &wrappedServerStream{ServerStream: stream, ctx: ctx})
 		if err != nil && defaultFilterFunc(ctx, info.FullMethod) {
 			_ = notifier.NotifyAsync(err, ctx, notifier.Tags{
 				"grpcMethod": info.FullMethod,
