@@ -51,6 +51,8 @@ var (
 	cltInterceptorOpts []grpcprom.Option
 )
 
+// init registers the default server and client metrics with the default Prometheus registerer.
+// Callers should NOT call MustRegister on GetServerMetrics/GetClientMetrics — they are already registered.
 func init() {
 	prometheus.MustRegister(srvMetrics)
 	prometheus.MustRegister(cltMetrics)
@@ -107,7 +109,7 @@ func SetServerMetrics(m *grpcprom.ServerMetrics) {
 
 // SetClientMetrics sets custom client metrics for gRPC Prometheus instrumentation.
 // The new metrics are automatically registered with the default Prometheus registerer.
-// Must be called during initialization, before the server starts. Not safe for concurrent use.
+// Must be called during initialization, before the first client RPC. Not safe for concurrent use.
 func SetClientMetrics(m *grpcprom.ClientMetrics) {
 	if m != nil {
 		registerMetrics(cltMetrics, m)
@@ -116,11 +118,15 @@ func SetClientMetrics(m *grpcprom.ClientMetrics) {
 }
 
 // GetServerMetrics returns the current server metrics instance.
+// The metrics are already registered with the default Prometheus registerer.
+// Use this for InitializeMetrics or custom metric queries — do not call MustRegister on the result.
 func GetServerMetrics() *grpcprom.ServerMetrics {
 	return srvMetrics
 }
 
 // GetClientMetrics returns the current client metrics instance.
+// The metrics are already registered with the default Prometheus registerer.
+// Use this for custom metric queries — do not call MustRegister on the result.
 func GetClientMetrics() *grpcprom.ClientMetrics {
 	return cltMetrics
 }
@@ -246,8 +252,8 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 			ResponseTimeLoggingInterceptor(defaultFilterFunc),
 			TraceIdInterceptor(),
 			grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithFilterFunc(defaultFilterFunc)),
-			srvMetrics.UnaryServerInterceptor(srvInterceptorOpts...),
 			ServerErrorInterceptor(),
+			srvMetrics.UnaryServerInterceptor(srvInterceptorOpts...),
 			NewRelicInterceptor(),
 			PanicRecoveryInterceptor(),
 		)
@@ -321,8 +327,8 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 		ints = append(ints,
 			ResponseTimeLoggingStreamInterceptor(),
 			grpc_opentracing.StreamServerInterceptor(),
-			srvMetrics.StreamServerInterceptor(srvInterceptorOpts...),
 			ServerErrorStreamInterceptor(),
+			srvMetrics.StreamServerInterceptor(srvInterceptorOpts...),
 		)
 	}
 	return ints
