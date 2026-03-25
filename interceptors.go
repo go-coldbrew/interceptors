@@ -113,8 +113,10 @@ func UseColdBrewClientInterceptors(ctx context.Context, flag bool) {
 	useCBClientInterceptors = flag
 }
 
-// DoHTTPtoGRPC allows calling the interceptors when you use the Register<svc-name>HandlerServer in grpc-gateway,
-// see example below for reference
+// DoHTTPtoGRPC allows calling the interceptors when you use the Register<svc-name>HandlerServer in grpc-gateway.
+// The interceptor chain is cached on first invocation. All interceptor configuration
+// (AddUnaryServerInterceptor, SetFilterFunc, etc.) must be finalized before the first call.
+// See example below for reference
 //
 //	func (s *svc) Echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
 //	    handler := func(ctx context.Context, req interface{}) (interface{}, error) {
