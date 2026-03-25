@@ -203,7 +203,7 @@ FilterMethodsFunc is the default implementation of Filter function
 func GRPCClientInterceptor(options ...grpc_opentracing.Option) grpc.UnaryClientInterceptor
 ```
 
-GRPCClientInterceptor is the interceptor that intercepts all cleint requests and adds tracing info to them
+GRPCClientInterceptor is the interceptor that intercepts all client requests and adds tracing info to them
 
 <a name="GetClientMetrics"></a>
 ## func [GetClientMetrics](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L130>)

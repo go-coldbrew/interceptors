@@ -448,7 +448,7 @@ func NewRelicClientInterceptor() grpc.UnaryClientInterceptor {
 	}
 }
 
-// GRPCClientInterceptor is the interceptor that intercepts all cleint requests and adds tracing info to them
+// GRPCClientInterceptor is the interceptor that intercepts all client requests and adds tracing info to them
 func GRPCClientInterceptor(options ...grpc_opentracing.Option) grpc.UnaryClientInterceptor {
 	return grpc_opentracing.UnaryClientInterceptor(options...)
 }
