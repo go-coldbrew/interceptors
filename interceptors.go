@@ -39,6 +39,9 @@ import (
 // export a new constant and remove this one to force coordinated updates.
 const SupportPackageIsVersion1 = true
 
+// Compile-time version compatibility check.
+var _ = errors.SupportPackageIsVersion1
+
 var (
 	//FilterMethods is the list of methods that are filtered by default
 	FilterMethods            = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
