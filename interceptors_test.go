@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"testing"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -407,4 +408,108 @@ func TestChainStreamClient(t *testing.T) {
 	if len(order) != 4 || order[0] != 1 || order[1] != 2 || order[2] != 3 || order[3] != 0 {
 		t.Errorf("expected execution order [1 2 3 0], got %v", order)
 	}
+}
+
+// TestChainUnaryServerConcurrent verifies that a single chained interceptor
+// can be invoked concurrently from multiple goroutines without data races
+// and that each goroutine sees the correct execution order and output.
+// Run with -race to detect violations.
+func TestChainUnaryServerConcurrent(t *testing.T) {
+	chain := chainUnaryServer([]grpc.UnaryServerInterceptor{
+		func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+			return handler(ctx, req.(string)+"-A")
+		},
+		func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+			return handler(ctx, req.(string)+"-B")
+		},
+	})
+
+	info := &grpc.UnaryServerInfo{FullMethod: "/test/Concurrent"}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return req.(string) + "-handler", nil
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resp, err := chain(context.Background(), "start", info, handler)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if resp != "start-A-B-handler" {
+				t.Errorf("expected 'start-A-B-handler', got %v", resp)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// TestChainUnaryClientConcurrent verifies that the unary client chain is safe
+// for concurrent use and produces the correct output from each goroutine.
+func TestChainUnaryClientConcurrent(t *testing.T) {
+	chain := chainUnaryClient([]grpc.UnaryClientInterceptor{
+		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			return invoker(ctx, method+"-A", req, reply, cc, opts...)
+		},
+		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			return invoker(ctx, method+"-B", req, reply, cc, opts...)
+		},
+	})
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var got string
+			invoker := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+				got = method
+				return nil
+			}
+			err := chain(context.Background(), "/svc/Call", nil, nil, nil, invoker)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if got != "/svc/Call-A-B" {
+				t.Errorf("expected '/svc/Call-A-B', got %v", got)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// TestChainStreamClientConcurrent verifies that the stream client chain is safe
+// for concurrent use and produces the correct output from each goroutine.
+func TestChainStreamClientConcurrent(t *testing.T) {
+	chain := chainStreamClient([]grpc.StreamClientInterceptor{
+		func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+			return streamer(ctx, desc, cc, method+"-A", opts...)
+		},
+		func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+			return streamer(ctx, desc, cc, method+"-B", opts...)
+		},
+	})
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var got string
+			streamer := func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+				got = method
+				return nil, nil
+			}
+			_, err := chain(context.Background(), nil, nil, "/svc/Stream", streamer)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if got != "/svc/Stream-A-B" {
+				t.Errorf("expected '/svc/Stream-A-B', got %v", got)
+			}
+		}()
+	}
+	wg.Wait()
 }
