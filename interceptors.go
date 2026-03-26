@@ -149,7 +149,7 @@ func registerCollector(c prometheus.Collector) {
 			}
 			return
 		}
-		log.Error(context.Background(), "msg", "gRPC Prometheus metrics will not be available: the deprecated go-grpc-prometheus package has already registered metrics with the same names. Update github.com/go-coldbrew/core to the latest version to fix this.", "err", err)
+		log.Error(context.Background(), "msg", "gRPC Prometheus metrics registration failed. If you are using github.com/go-coldbrew/core, it may need to be updated to the latest version.", "err", err)
 	}
 }
 
