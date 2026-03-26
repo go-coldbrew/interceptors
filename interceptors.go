@@ -33,6 +33,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// SupportPackageIsVersion1 is a compile-time assertion constant.
+// Downstream packages (e.g. core) reference this constant to enforce
+// version compatibility. When interceptors makes a breaking change,
+// export a new constant and remove this one to force coordinated updates.
+const SupportPackageIsVersion1 = true
+
 var (
 	//FilterMethods is the list of methods that are filtered by default
 	FilterMethods            = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
@@ -132,17 +138,15 @@ func SetClientMetricsOptions(opts ...grpcprom.ClientMetricsOption) {
 
 func registerCollector(c prometheus.Collector) {
 	if err := prometheus.Register(c); err != nil {
-		// If a collector with the same metrics is already registered (e.g. from
-		// the deprecated go-grpc-prometheus package's init()), replace it with ours
-		// so the interceptors' metrics instance is the one being scraped.
-		if are, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		var are prometheus.AlreadyRegisteredError
+		if stdError.As(err, &are) {
 			prometheus.Unregister(are.ExistingCollector)
 			if err := prometheus.Register(c); err != nil {
-				log.Warn(context.Background(), "msg", "failed to re-register gRPC metrics with Prometheus after unregistering old collector", "err", err)
+				log.Warn(context.Background(), "msg", "failed to re-register gRPC metrics with Prometheus", "err", err)
 			}
-		} else {
-			log.Warn(context.Background(), "msg", "failed to register gRPC metrics with Prometheus", "err", err)
+			return
 		}
+		log.Error(context.Background(), "msg", "gRPC Prometheus metrics will not be available: the deprecated go-grpc-prometheus package has already registered metrics with the same names. Update github.com/go-coldbrew/core to the latest version to fix this.", "err", err)
 	}
 }
 
