@@ -22,7 +22,6 @@ import (
 	"github.com/go-coldbrew/log/loggers"
 	"github.com/go-coldbrew/options"
 	nrutil "github.com/go-coldbrew/tracing/newrelic"
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	grpcprom "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
 	"github.com/prometheus/client_golang/prometheus"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
@@ -268,7 +267,6 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 		ints = append(ints,
 			ResponseTimeLoggingInterceptor(defaultFilterFunc),
 			TraceIdInterceptor(),
-			grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithFilterFunc(defaultFilterFunc)),
 			getServerMetrics().UnaryServerInterceptor(),
 			ServerErrorInterceptor(),
 			NewRelicInterceptor(),
@@ -286,7 +284,6 @@ func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInt
 	}
 	if useCBClientInterceptors {
 		hystrixOptions := make([]grpc.CallOption, 0)
-		opentracingOpt := make([]grpc_opentracing.Option, 0)
 		for _, opt := range defaultOpts {
 			if opt == nil {
 				continue
@@ -294,14 +291,10 @@ func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInt
 			if o, ok := opt.(grpc.CallOption); ok {
 				hystrixOptions = append(hystrixOptions, o)
 			}
-			if o, ok := opt.(grpc_opentracing.Option); ok {
-				opentracingOpt = append(opentracingOpt, o)
-			}
 		}
 		ints = append(ints,
 			HystrixClientInterceptor(hystrixOptions...),
 			grpc_retry.UnaryClientInterceptor(),
-			GRPCClientInterceptor(opentracingOpt...),
 			NewRelicClientInterceptor(),
 			getClientMetrics().UnaryClientInterceptor(),
 		)
@@ -316,17 +309,7 @@ func DefaultClientStreamInterceptors(defaultOpts ...interface{}) []grpc.StreamCl
 		ints = append(ints, streamClientInterceptors...)
 	}
 	if useCBClientInterceptors {
-		opentracingOpt := make([]grpc_opentracing.Option, 0)
-		for _, opt := range defaultOpts {
-			if opt == nil {
-				continue
-			}
-			if o, ok := opt.(grpc_opentracing.Option); ok {
-				opentracingOpt = append(opentracingOpt, o)
-			}
-		}
 		ints = append(ints,
-			grpc_opentracing.StreamClientInterceptor(opentracingOpt...),
 			nrgrpc.StreamClientInterceptor,
 			getClientMetrics().StreamClientInterceptor(),
 		)
@@ -343,7 +326,6 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 	if useCBServerInterceptors {
 		ints = append(ints,
 			ResponseTimeLoggingStreamInterceptor(),
-			grpc_opentracing.StreamServerInterceptor(),
 			getServerMetrics().StreamServerInterceptor(),
 			ServerErrorStreamInterceptor(),
 		)
@@ -465,9 +447,13 @@ func NewRelicClientInterceptor() grpc.UnaryClientInterceptor {
 	}
 }
 
-// GRPCClientInterceptor is the interceptor that intercepts all cleint requests and adds tracing info to them
-func GRPCClientInterceptor(options ...grpc_opentracing.Option) grpc.UnaryClientInterceptor {
-	return grpc_opentracing.UnaryClientInterceptor(options...)
+// Deprecated: GRPCClientInterceptor is no longer needed. gRPC tracing is now handled
+// by otelgrpc.NewClientHandler stats handler configured at the client level.
+// This function is retained for backwards compatibility but returns a no-op interceptor.
+func GRPCClientInterceptor(_ ...interface{}) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
 }
 
 // HystrixClientInterceptor returns a unary client interceptor that executes the RPC inside a Hystrix command.
