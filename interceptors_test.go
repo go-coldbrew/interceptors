@@ -513,3 +513,21 @@ func TestChainStreamClientConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestGRPCClientInterceptorNoOp(t *testing.T) {
+	interceptor := GRPCClientInterceptor()
+
+	invoked := false
+	mockInvoker := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		invoked = true
+		return nil
+	}
+
+	err := interceptor(context.Background(), "/test.Service/Method", nil, nil, nil, mockInvoker)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !invoked {
+		t.Fatal("expected invoker to be called")
+	}
+}
