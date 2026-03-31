@@ -20,6 +20,7 @@ func resetGlobals() {
 	unaryClientInterceptors = []grpc.UnaryClientInterceptor{}
 	streamClientInterceptors = []grpc.StreamClientInterceptor{}
 	useCBClientInterceptors = true
+	filterCache = sync.Map{}
 }
 
 func TestFilterMethodsFunc(t *testing.T) {
@@ -530,4 +531,35 @@ func TestGRPCClientInterceptorNoOp(t *testing.T) {
 	if !invoked {
 		t.Fatal("expected invoker to be called")
 	}
+}
+
+func BenchmarkFilterMethodsFunc(b *testing.B) {
+	ctx := context.Background()
+	methods := []string{
+		"/mypackage.MyService/DoWork",
+		"/grpc.health.v1.Health/healthcheck",
+		"/another.Service/GetUser",
+	}
+	b.Run("cached", func(b *testing.B) {
+		// Warm the cache
+		for _, m := range methods {
+			FilterMethodsFunc(ctx, m)
+		}
+		b.ResetTimer()
+		b.ReportAllocs()
+		for b.Loop() {
+			for _, m := range methods {
+				FilterMethodsFunc(ctx, m)
+			}
+		}
+	})
+	b.Run("cold", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			filterCache = sync.Map{}
+			for _, m := range methods {
+				FilterMethodsFunc(ctx, m)
+			}
+		}
+	})
 }

@@ -69,15 +69,43 @@ func SetResponseTimeLogLevel(ctx context.Context, level loggers.Level) {
 // If it returns false, the given request will not be traced.
 type FilterFunc func(ctx context.Context, fullMethodName string) bool
 
+// filterMethodsLower holds the pre-lowercased filter strings, built once
+// from FilterMethods to avoid lowercasing them on every RPC.
+var filterMethodsLower []string
+
+// filterCache caches method name -> pass/filter decisions. gRPC method names
+// are stable strings that repeat on every request, so after the first lookup
+// all subsequent calls for the same method are a single map read.
+var filterCache sync.Map // map[string]bool
+
+func init() {
+	rebuildFilterMethodsLower()
+}
+
+func rebuildFilterMethodsLower() {
+	lower := make([]string, len(FilterMethods))
+	for i, m := range FilterMethods {
+		lower[i] = strings.ToLower(m)
+	}
+	filterMethodsLower = lower
+	filterCache = sync.Map{} // clear stale cached decisions
+}
+
 // FilterMethodsFunc is the default implementation of Filter function
 func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool {
+	if v, ok := filterCache.Load(fullMethodName); ok {
+		return v.(bool)
+	}
 	lowerMethod := strings.ToLower(fullMethodName)
-	for _, name := range FilterMethods {
+	result := true
+	for _, name := range filterMethodsLower {
 		if strings.Contains(lowerMethod, name) {
-			return false
+			result = false
+			break
 		}
 	}
-	return true
+	filterCache.Store(fullMethodName, result)
+	return result
 }
 
 // SetFilterFunc sets the default filter function to be used by interceptors.
