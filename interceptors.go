@@ -13,6 +13,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/afex/hystrix-go/hystrix"
@@ -42,7 +43,9 @@ const SupportPackageIsVersion1 = true
 var _ = errors.SupportPackageIsVersion1
 
 var (
-	//FilterMethods is the list of methods that are filtered by default
+	// Deprecated: FilterMethods is the list of methods that are filtered by default.
+	// Use SetFilterMethods instead. Direct mutation is still detected and handled,
+	// but the setter is preferred for clarity and cache correctness.
 	FilterMethods            = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
 	defaultFilterFunc        = FilterMethodsFunc
 	unaryServerInterceptors  = []grpc.UnaryServerInterceptor{}
@@ -69,42 +72,77 @@ func SetResponseTimeLogLevel(ctx context.Context, level loggers.Level) {
 // If it returns false, the given request will not be traced.
 type FilterFunc func(ctx context.Context, fullMethodName string) bool
 
-// filterMethodsLower holds the pre-lowercased filter strings, built once
-// from FilterMethods to avoid lowercasing them on every RPC.
-var filterMethodsLower []string
-
-// filterCache caches method name -> pass/filter decisions. gRPC method names
-// are stable strings that repeat on every request, so after the first lookup
-// all subsequent calls for the same method are a single map read.
-var filterCache sync.Map // map[string]bool
-
-func init() {
-	rebuildFilterMethodsLower()
+// filterState holds pre-computed filter data and a per-instance cache.
+// A new filterState is created whenever FilterMethods changes, which
+// atomically invalidates the old cache.
+type filterState struct {
+	methods     []string // lowercased filter substrings
+	cache       sync.Map // map[string]bool
+	sourceLen   int      // len(FilterMethods) when this state was built
+	sourceFirst string   // FilterMethods[0] when built (fast mutation check)
 }
 
-func rebuildFilterMethodsLower() {
+var currentFilter atomic.Pointer[filterState]
+
+func init() {
+	currentFilter.Store(buildFilterState())
+}
+
+func buildFilterState() *filterState {
 	lower := make([]string, len(FilterMethods))
 	for i, m := range FilterMethods {
 		lower[i] = strings.ToLower(m)
 	}
-	filterMethodsLower = lower
-	filterCache = sync.Map{} // clear stale cached decisions
+	s := &filterState{
+		methods:   lower,
+		sourceLen: len(FilterMethods),
+	}
+	if len(FilterMethods) > 0 {
+		s.sourceFirst = FilterMethods[0]
+	}
+	return s
+}
+
+// filterMethodsChanged reports whether the deprecated FilterMethods variable
+// has been mutated since this filterState was built.
+func (s *filterState) changed() bool {
+	if len(FilterMethods) != s.sourceLen {
+		return true
+	}
+	if s.sourceLen > 0 && FilterMethods[0] != s.sourceFirst {
+		return true
+	}
+	return false
+}
+
+// SetFilterMethods sets the list of method substrings to exclude from tracing/logging.
+// It rebuilds the internal cache. Must be called during initialization, before
+// the server starts. Not safe for concurrent use.
+func SetFilterMethods(ctx context.Context, methods []string) {
+	FilterMethods = methods
+	currentFilter.Store(buildFilterState())
 }
 
 // FilterMethodsFunc is the default implementation of Filter function
 func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool {
-	if v, ok := filterCache.Load(fullMethodName); ok {
+	f := currentFilter.Load()
+	// Auto-detect direct mutation of the deprecated FilterMethods variable.
+	if f.changed() {
+		f = buildFilterState()
+		currentFilter.Store(f)
+	}
+	if v, ok := f.cache.Load(fullMethodName); ok {
 		return v.(bool)
 	}
 	lowerMethod := strings.ToLower(fullMethodName)
 	result := true
-	for _, name := range filterMethodsLower {
+	for _, name := range f.methods {
 		if strings.Contains(lowerMethod, name) {
 			result = false
 			break
 		}
 	}
-	filterCache.Store(fullMethodName, result)
+	f.cache.Store(fullMethodName, result)
 	return result
 }
 

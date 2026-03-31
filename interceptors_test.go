@@ -13,6 +13,8 @@ import (
 
 // resetGlobals restores package-level state so tests don't interfere with each other.
 func resetGlobals() {
+	FilterMethods = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
+	currentFilter.Store(buildFilterState())
 	defaultFilterFunc = FilterMethodsFunc
 	unaryServerInterceptors = []grpc.UnaryServerInterceptor{}
 	streamServerInterceptors = []grpc.StreamServerInterceptor{}
@@ -20,7 +22,6 @@ func resetGlobals() {
 	unaryClientInterceptors = []grpc.UnaryClientInterceptor{}
 	streamClientInterceptors = []grpc.StreamClientInterceptor{}
 	useCBClientInterceptors = true
-	filterCache = sync.Map{}
 }
 
 func TestFilterMethodsFunc(t *testing.T) {
@@ -554,9 +555,12 @@ func BenchmarkFilterMethodsFunc(b *testing.B) {
 		}
 	})
 	b.Run("cold", func(b *testing.B) {
+		// Measures full cold-path cost: cache miss + ToLower + contains scan + store.
 		b.ReportAllocs()
 		for b.Loop() {
-			filterCache = sync.Map{}
+			b.StopTimer()
+			currentFilter.Store(buildFilterState())
+			b.StartTimer()
 			for _, m := range methods {
 				FilterMethodsFunc(ctx, m)
 			}
