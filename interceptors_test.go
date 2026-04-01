@@ -558,6 +558,8 @@ func TestGRPCClientInterceptorNoOp(t *testing.T) {
 }
 
 func BenchmarkFilterMethodsFunc(b *testing.B) {
+	// Reset to known state to avoid cross-test contamination.
+	resetGlobals()
 	ctx := context.Background()
 	methods := []string{
 		"/mypackage.MyService/DoWork",

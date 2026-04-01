@@ -120,8 +120,19 @@ func (s *filterState) changed() bool {
 // It rebuilds the internal cache. Must be called during initialization, before
 // the server starts. Not safe for concurrent use.
 func SetFilterMethods(ctx context.Context, methods []string) {
-	FilterMethods = methods
+	// Defensive copy to prevent aliasing: if the caller later mutates
+	// their slice, it won't silently affect filtering.
+	cp := make([]string, len(methods))
+	copy(cp, methods)
+	FilterMethods = cp
 	currentFilter.Store(buildFilterState())
+}
+
+// isCanonicalGRPCMethod returns true for standard gRPC method names
+// of the form "/package.Service/Method". Dynamic HTTP paths are not
+// cached to prevent unbounded memory growth.
+func isCanonicalGRPCMethod(name string) bool {
+	return len(name) > 0 && name[0] == '/' && strings.Count(name, "/") == 2
 }
 
 // FilterMethodsFunc is the default implementation of Filter function
@@ -132,8 +143,11 @@ func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool {
 		f = buildFilterState()
 		currentFilter.Store(f)
 	}
-	if v, ok := f.cache.Load(fullMethodName); ok {
-		return v.(bool)
+	cacheable := isCanonicalGRPCMethod(fullMethodName)
+	if cacheable {
+		if v, ok := f.cache.Load(fullMethodName); ok {
+			return v.(bool)
+		}
 	}
 	lowerMethod := strings.ToLower(fullMethodName)
 	result := true
@@ -143,7 +157,9 @@ func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool {
 			break
 		}
 	}
-	f.cache.Store(fullMethodName, result)
+	if cacheable {
+		f.cache.Store(fullMethodName, result)
+	}
 	return result
 }
 
