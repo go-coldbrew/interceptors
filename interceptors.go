@@ -44,8 +44,9 @@ var _ = errors.SupportPackageIsVersion1
 
 var (
 	// Deprecated: FilterMethods is the list of methods that are filtered by default.
-	// Use SetFilterMethods instead. Direct mutation is still detected and handled,
-	// but the setter is preferred for clarity and cache correctness.
+	// Use SetFilterMethods instead. Only some direct mutations (replacing the slice
+	// or changing the first element) are detected by internal change detection;
+	// other in-place changes may not invalidate caches correctly.
 	FilterMethods            = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
 	defaultFilterFunc        = FilterMethodsFunc
 	unaryServerInterceptors  = []grpc.UnaryServerInterceptor{}
@@ -103,7 +104,7 @@ func buildFilterState() *filterState {
 	return s
 }
 
-// filterMethodsChanged reports whether the deprecated FilterMethods variable
+// changed reports whether the deprecated FilterMethods variable
 // has been mutated since this filterState was built.
 func (s *filterState) changed() bool {
 	if len(FilterMethods) != s.sourceLen {

@@ -74,6 +74,29 @@ func TestSetFilterFunc(t *testing.T) {
 	}
 }
 
+func TestSetFilterMethods(t *testing.T) {
+	defer resetGlobals()
+	ctx := context.Background()
+
+	// "/mypackage.MyService/DoWork" passes with default filters.
+	if !FilterMethodsFunc(ctx, "/mypackage.MyService/DoWork") {
+		t.Fatal("DoWork should pass default filter")
+	}
+
+	// Cache is now warm for DoWork. Change filters to block it.
+	SetFilterMethods(ctx, []string{"dowork"})
+
+	// Cached decision must be invalidated — DoWork should now be filtered.
+	if FilterMethodsFunc(ctx, "/mypackage.MyService/DoWork") {
+		t.Error("DoWork should be filtered after SetFilterMethods")
+	}
+
+	// healthcheck should now pass since it's no longer in the filter list.
+	if !FilterMethodsFunc(ctx, "/grpc.health.v1.Health/healthcheck") {
+		t.Error("healthcheck should pass after SetFilterMethods removed it")
+	}
+}
+
 func TestAddUnaryServerInterceptor(t *testing.T) {
 	defer resetGlobals()
 
