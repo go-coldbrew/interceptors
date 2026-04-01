@@ -128,11 +128,14 @@ func SetFilterMethods(ctx context.Context, methods []string) {
 	currentFilter.Store(buildFilterState())
 }
 
-// isCanonicalGRPCMethod returns true for standard gRPC method names
-// of the form "/package.Service/Method". Dynamic HTTP paths are not
-// cached to prevent unbounded memory growth.
-func isCanonicalGRPCMethod(name string) bool {
-	return len(name) > 0 && name[0] == '/' && strings.Count(name, "/") == 2
+// isGRPCRequest returns true if the context is a gRPC server context.
+// Uses grpc.Method(ctx) which is a single context value lookup with zero
+// allocations. HTTP handlers pass plain contexts where this returns false.
+// This is used to decide whether to cache filter decisions — gRPC method
+// names are stable and finite, while HTTP paths can be high-cardinality.
+func isGRPCRequest(ctx context.Context) bool {
+	_, ok := grpc.Method(ctx)
+	return ok
 }
 
 // FilterMethodsFunc is the default implementation of Filter function
@@ -143,7 +146,7 @@ func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool {
 		f = buildFilterState()
 		currentFilter.Store(f)
 	}
-	cacheable := isCanonicalGRPCMethod(fullMethodName)
+	cacheable := isGRPCRequest(ctx)
 	if cacheable {
 		if v, ok := f.cache.Load(fullMethodName); ok {
 			return v.(bool)

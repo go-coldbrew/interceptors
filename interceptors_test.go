@@ -9,7 +9,22 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
+	grpcmd "google.golang.org/grpc/metadata"
 )
+
+// mockStream implements grpc.ServerTransportStream for testing.
+type mockStream struct{ method string }
+
+func (s *mockStream) Method() string                    { return s.method }
+func (s *mockStream) SetHeader(grpcmd.MD) error         { return nil }
+func (s *mockStream) SendHeader(grpcmd.MD) error        { return nil }
+func (s *mockStream) SetTrailer(grpcmd.MD) error        { return nil }
+
+// grpcContext returns a context that grpc.Method() recognizes as a gRPC server context.
+func grpcContext() context.Context {
+	return grpc.NewContextWithServerTransportStream(
+		context.Background(), &mockStream{method: "/test.Service/Method"})
+}
 
 // resetGlobals restores package-level state so tests don't interfere with each other.
 func resetGlobals() {
@@ -76,7 +91,8 @@ func TestSetFilterFunc(t *testing.T) {
 
 func TestSetFilterMethods(t *testing.T) {
 	defer resetGlobals()
-	ctx := context.Background()
+	// Use gRPC server context so caching is exercised.
+	ctx := grpcContext()
 
 	// "/mypackage.MyService/DoWork" passes with default filters.
 	if !FilterMethodsFunc(ctx, "/mypackage.MyService/DoWork") {
@@ -94,6 +110,27 @@ func TestSetFilterMethods(t *testing.T) {
 	// healthcheck should now pass since it's no longer in the filter list.
 	if !FilterMethodsFunc(ctx, "/grpc.health.v1.Health/healthcheck") {
 		t.Error("healthcheck should pass after SetFilterMethods removed it")
+	}
+}
+
+func TestFilterMethodsFunc_HTTPPathNotCached(t *testing.T) {
+	defer resetGlobals()
+	// HTTP context (no gRPC metadata) — results should not be cached.
+	httpCtx := context.Background()
+
+	// Call twice with same path.
+	FilterMethodsFunc(httpCtx, "/users/123")
+	FilterMethodsFunc(httpCtx, "/users/456")
+
+	// Verify nothing was cached.
+	f := currentFilter.Load()
+	cached := 0
+	f.cache.Range(func(_, _ interface{}) bool {
+		cached++
+		return true
+	})
+	if cached != 0 {
+		t.Errorf("expected 0 cached entries for HTTP paths, got %d", cached)
 	}
 }
 
@@ -560,7 +597,8 @@ func TestGRPCClientInterceptorNoOp(t *testing.T) {
 func BenchmarkFilterMethodsFunc(b *testing.B) {
 	// Reset to known state to avoid cross-test contamination.
 	resetGlobals()
-	ctx := context.Background()
+	// Use a gRPC server context so caching is enabled.
+	grpcCtx := grpcContext()
 	methods := []string{
 		"/mypackage.MyService/DoWork",
 		"/grpc.health.v1.Health/healthcheck",
@@ -569,13 +607,13 @@ func BenchmarkFilterMethodsFunc(b *testing.B) {
 	b.Run("cached", func(b *testing.B) {
 		// Warm the cache
 		for _, m := range methods {
-			FilterMethodsFunc(ctx, m)
+			FilterMethodsFunc(grpcCtx, m)
 		}
 		b.ResetTimer()
 		b.ReportAllocs()
 		for b.Loop() {
 			for _, m := range methods {
-				FilterMethodsFunc(ctx, m)
+				FilterMethodsFunc(grpcCtx, m)
 			}
 		}
 	})
@@ -587,7 +625,7 @@ func BenchmarkFilterMethodsFunc(b *testing.B) {
 			currentFilter.Store(buildFilterState())
 			b.StartTimer()
 			for _, m := range methods {
-				FilterMethodsFunc(ctx, m)
+				FilterMethodsFunc(grpcCtx, m)
 			}
 		}
 	})
