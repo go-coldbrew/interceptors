@@ -56,6 +56,7 @@ var (
 	streamClientInterceptors = []grpc.StreamClientInterceptor{}
 	useCBClientInterceptors  = true
 	responseTimeLogLevel     loggers.Level = loggers.InfoLevel
+	responseTimeLogErrorOnly bool
 	srvMetricsOpts           []grpcprom.ServerMetricsOption
 	cltMetricsOpts           []grpcprom.ClientMetricsOption
 	srvMetricsOnce           sync.Once
@@ -68,6 +69,13 @@ var (
 // Default is InfoLevel. Must be called during initialization, before the server starts. Not safe for concurrent use.
 func SetResponseTimeLogLevel(ctx context.Context, level loggers.Level) {
 	responseTimeLogLevel = level
+}
+
+// SetResponseTimeLogErrorOnly when set to true, only logs response time when
+// the request returns an error. Successful requests are not logged.
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
+func SetResponseTimeLogErrorOnly(errorOnly bool) {
+	responseTimeLogErrorOnly = errorOnly
 }
 
 // If it returns false, the given request will not be traced.
@@ -395,10 +403,10 @@ func DefaultClientStreamInterceptors(defaultOpts ...interface{}) []grpc.StreamCl
 		ints = append(ints, streamClientInterceptors...)
 	}
 	if useCBClientInterceptors {
-		ints = append(ints,
-			nrgrpc.StreamClientInterceptor,
-			getClientMetrics().StreamClientInterceptor(),
-		)
+		if nrutil.GetNewRelicApp() != nil {
+			ints = append(ints, nrgrpc.StreamClientInterceptor)
+		}
+		ints = append(ints, getClientMetrics().StreamClientInterceptor())
 	}
 	return ints
 }
@@ -449,6 +457,9 @@ func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor {
 			if ff != nil && !ff(ctx, method) {
 				return
 			}
+			if responseTimeLogErrorOnly && err == nil {
+				return
+			}
 			logArgs := []any{"error", err, "took", time.Since(begin)}
 			if err != nil {
 				logArgs = append(logArgs, "grpcCode", status.Code(err))
@@ -468,8 +479,15 @@ func OptionsInterceptor() grpc.UnaryServerInterceptor {
 	}
 }
 
-// NewRelicInterceptor intercepts all server actions and reports them to newrelic
+// NewRelicInterceptor intercepts all server actions and reports them to newrelic.
+// When NewRelic app is nil (no license key configured), returns a pass-through
+// interceptor to avoid overhead.
 func NewRelicInterceptor() grpc.UnaryServerInterceptor {
+	if nrutil.GetNewRelicApp() == nil {
+		return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+			return handler(ctx, req)
+		}
+	}
 	nrh := nrgrpc.UnaryServerInterceptor(nrutil.GetNewRelicApp())
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		if defaultFilterFunc(ctx, info.FullMethod) {
@@ -522,8 +540,15 @@ func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor {
 	}
 }
 
-// NewRelicClientInterceptor intercepts all client actions and reports them to newrelic
+// NewRelicClientInterceptor intercepts all client actions and reports them to newrelic.
+// When NewRelic app is nil (no license key configured), returns a pass-through
+// interceptor to avoid overhead.
 func NewRelicClientInterceptor() grpc.UnaryClientInterceptor {
+	if nrutil.GetNewRelicApp() == nil {
+		return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}
+	}
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		if defaultFilterFunc(ctx, method) {
 			return nrgrpc.UnaryClientInterceptor(ctx, method, req, reply, cc, invoker, opts...)

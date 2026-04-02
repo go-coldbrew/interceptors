@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/go-coldbrew/log/loggers"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	grpcmd "google.golang.org/grpc/metadata"
@@ -37,6 +38,8 @@ func resetGlobals() {
 	unaryClientInterceptors = []grpc.UnaryClientInterceptor{}
 	streamClientInterceptors = []grpc.StreamClientInterceptor{}
 	useCBClientInterceptors = true
+	responseTimeLogErrorOnly = false
+	responseTimeLogLevel = loggers.InfoLevel
 }
 
 func TestFilterMethodsFunc(t *testing.T) {
