@@ -502,10 +502,7 @@ func NewRelicInterceptor() grpc.UnaryServerInterceptor {
 func ServerErrorInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		// set trace id if not set
-		ctx = notifier.SetTraceId(ctx)
-
-		traceID := notifier.GetTraceId(ctx)
-		ctx = loggers.AddToLogContext(ctx, "trace", traceID)
+		ctx, _ = notifier.SetTraceIdWithValue(ctx)
 		start := time.Now()
 		resp, err = handler(ctx, req)
 		if err != nil && defaultFilterFunc(ctx, info.FullMethod) {
@@ -657,9 +654,7 @@ func ResponseTimeLoggingStreamInterceptor() grpc.StreamServerInterceptor {
 func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 		ctx := stream.Context()
-		ctx = notifier.SetTraceId(ctx)
-		traceID := notifier.GetTraceId(ctx)
-		ctx = loggers.AddToLogContext(ctx, "trace", traceID)
+		ctx, _ = notifier.SetTraceIdWithValue(ctx)
 		start := time.Now()
 		err = handler(srv, stream)
 		if err != nil && defaultFilterFunc(ctx, info.FullMethod) {
