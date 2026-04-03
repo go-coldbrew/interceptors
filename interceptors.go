@@ -482,12 +482,13 @@ func OptionsInterceptor() grpc.UnaryServerInterceptor {
 // When NewRelic app is nil (no license key configured), returns a pass-through
 // interceptor to avoid overhead.
 func NewRelicInterceptor() grpc.UnaryServerInterceptor {
-	if nrutil.GetNewRelicApp() == nil {
+	app := nrutil.GetNewRelicApp()
+	if app == nil {
 		return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 			return handler(ctx, req)
 		}
 	}
-	nrh := nrgrpc.UnaryServerInterceptor(nrutil.GetNewRelicApp())
+	nrh := nrgrpc.UnaryServerInterceptor(app)
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		if defaultFilterFunc(ctx, info.FullMethod) {
 			return nrh(ctx, req, info, handler)
@@ -543,7 +544,8 @@ func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor {
 // When NewRelic app is nil (no license key configured), returns a pass-through
 // interceptor to avoid overhead.
 func NewRelicClientInterceptor() grpc.UnaryClientInterceptor {
-	if nrutil.GetNewRelicApp() == nil {
+	app := nrutil.GetNewRelicApp()
+	if app == nil {
 		return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 			return invoker(ctx, method, req, reply, cc, opts...)
 		}
@@ -635,7 +637,11 @@ func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientIn
 func ResponseTimeLoggingStreamInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 		defer func(begin time.Time) {
-			logArgs := []any{"method", info.FullMethod, "error", err, "took", time.Since(begin)}
+			if responseTimeLogErrorOnly && err == nil {
+				return
+			}
+			logArgs := make([]any, 0, 8)
+			logArgs = append(logArgs, "method", info.FullMethod, "error", err, "took", time.Since(begin))
 			if err != nil {
 				logArgs = append(logArgs, "grpcCode", status.Code(err))
 			}
