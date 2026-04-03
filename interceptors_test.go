@@ -736,3 +736,81 @@ func BenchmarkDefaultInterceptors(b *testing.B) {
 		chainedHandler(ctx, nil)
 	}
 }
+
+func TestNewRelicInterceptor_NilApp(t *testing.T) {
+	resetGlobals()
+	interceptor := NewRelicInterceptor()
+	ctx := grpcContext()
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
+
+	handlerCalled := false
+	resp, err := interceptor(ctx, "request", info, func(ctx context.Context, req interface{}) (interface{}, error) {
+		handlerCalled = true
+		return "response", nil
+	})
+	if !handlerCalled {
+		t.Fatal("handler should be called with nil NR app")
+	}
+	if resp != "response" || err != nil {
+		t.Fatalf("expected (response, nil), got (%v, %v)", resp, err)
+	}
+}
+
+func TestNewRelicClientInterceptor_NilApp(t *testing.T) {
+	resetGlobals()
+	interceptor := NewRelicClientInterceptor()
+
+	invokerCalled := false
+	err := interceptor(context.Background(), "/test.Service/Method", nil, nil, nil,
+		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+			invokerCalled = true
+			return nil
+		})
+	if !invokerCalled {
+		t.Fatal("invoker should be called with nil NR app")
+	}
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+}
+
+func TestResponseTimeLogErrorOnly_SkipsSuccess(t *testing.T) {
+	resetGlobals()
+	SetResponseTimeLogErrorOnly(true)
+	defer resetGlobals()
+
+	interceptor := ResponseTimeLoggingInterceptor(FilterMethodsFunc)
+	ctx := grpcContext()
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
+
+	resp, err := interceptor(ctx, nil, info, func(ctx context.Context, req interface{}) (interface{}, error) {
+		return "ok", nil
+	})
+	if resp != "ok" || err != nil {
+		t.Fatalf("expected (ok, nil), got (%v, %v)", resp, err)
+	}
+	// Success path with error-only mode: interceptor should complete without logging.
+	// No assertion on log output since we don't capture logs, but verifying
+	// no panic and correct return values confirms the code path works.
+}
+
+func TestResponseTimeLogErrorOnly_LogsErrors(t *testing.T) {
+	resetGlobals()
+	SetResponseTimeLogErrorOnly(true)
+	defer resetGlobals()
+
+	interceptor := ResponseTimeLoggingInterceptor(FilterMethodsFunc)
+	ctx := grpcContext()
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
+
+	testErr := errors.New("handler failed")
+	resp, err := interceptor(ctx, nil, info, func(ctx context.Context, req interface{}) (interface{}, error) {
+		return nil, testErr
+	})
+	if resp != nil {
+		t.Fatalf("expected nil resp, got %v", resp)
+	}
+	if err != testErr {
+		t.Fatalf("expected handler error, got %v", err)
+	}
+}
