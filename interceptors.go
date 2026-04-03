@@ -450,8 +450,6 @@ func DebugLoggingInterceptor() grpc.UnaryServerInterceptor {
 // ResponseTimeLoggingInterceptor logs response time for each request on server
 func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		ctx = options.AddToOptions(ctx, "", "")
-		ctx = loggers.AddToLogContext(ctx, "", "")
 		ctx = loggers.AddToLogContext(ctx, "grpcMethod", info.FullMethod)
 		defer func(ctx context.Context, method string, begin time.Time) {
 			if ff != nil && !ff(ctx, method) {
