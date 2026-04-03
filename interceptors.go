@@ -458,7 +458,8 @@ func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor {
 			if responseTimeLogErrorOnly && err == nil {
 				return
 			}
-			logArgs := []any{"error", err, "took", time.Since(begin)}
+			logArgs := make([]any, 0, 6)
+			logArgs = append(logArgs, "error", err, "took", time.Since(begin))
 			if err != nil {
 				logArgs = append(logArgs, "grpcCode", status.Code(err))
 			}
