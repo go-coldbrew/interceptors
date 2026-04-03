@@ -2,11 +2,13 @@ package interceptors
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 	"testing"
 
+	"github.com/go-coldbrew/log/loggers"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	grpcmd "google.golang.org/grpc/metadata"
@@ -37,6 +39,8 @@ func resetGlobals() {
 	unaryClientInterceptors = []grpc.UnaryClientInterceptor{}
 	streamClientInterceptors = []grpc.StreamClientInterceptor{}
 	useCBClientInterceptors = true
+	responseTimeLogErrorOnly = false
+	responseTimeLogLevel = loggers.InfoLevel
 }
 
 func TestFilterMethodsFunc(t *testing.T) {
@@ -629,4 +633,106 @@ func BenchmarkFilterMethodsFunc(b *testing.B) {
 			}
 		}
 	})
+}
+
+// noopHandler is a handler that returns immediately with no error.
+var noopHandler grpc.UnaryHandler = func(ctx context.Context, req interface{}) (interface{}, error) {
+	return "ok", nil
+}
+
+// errHandler is a handler that returns an error.
+var errHandler grpc.UnaryHandler = func(ctx context.Context, req interface{}) (interface{}, error) {
+	return nil, errors.New("test error")
+}
+
+var benchInfo = &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
+
+func BenchmarkNewRelicInterceptor_NilApp(b *testing.B) {
+	// NR app is nil by default (no license key). The interceptor should
+	// be a direct pass-through with zero overhead.
+	resetGlobals()
+	interceptor := NewRelicInterceptor()
+	ctx := grpcContext()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for b.Loop() {
+		interceptor(ctx, nil, benchInfo, noopHandler)
+	}
+}
+
+func BenchmarkResponseTimeLogging(b *testing.B) {
+	resetGlobals()
+	// Use debug level — the slog default logger discards debug, so we
+	// measure interceptor + log-args-building overhead without I/O noise.
+	responseTimeLogLevel = loggers.DebugLevel
+	ctx := grpcContext()
+	ff := FilterMethodsFunc
+
+	b.Run("default/success", func(b *testing.B) {
+		responseTimeLogErrorOnly = false
+		interceptor := ResponseTimeLoggingInterceptor(ff)
+		b.ResetTimer()
+		b.ReportAllocs()
+		for b.Loop() {
+			interceptor(ctx, nil, benchInfo, noopHandler)
+		}
+	})
+
+	b.Run("default/error", func(b *testing.B) {
+		responseTimeLogErrorOnly = false
+		interceptor := ResponseTimeLoggingInterceptor(ff)
+		b.ResetTimer()
+		b.ReportAllocs()
+		for b.Loop() {
+			interceptor(ctx, nil, benchInfo, errHandler)
+		}
+	})
+
+	b.Run("error_only/success", func(b *testing.B) {
+		responseTimeLogErrorOnly = true
+		interceptor := ResponseTimeLoggingInterceptor(ff)
+		b.ResetTimer()
+		b.ReportAllocs()
+		for b.Loop() {
+			interceptor(ctx, nil, benchInfo, noopHandler)
+		}
+	})
+
+	b.Run("error_only/error", func(b *testing.B) {
+		responseTimeLogErrorOnly = true
+		interceptor := ResponseTimeLoggingInterceptor(ff)
+		b.ResetTimer()
+		b.ReportAllocs()
+		for b.Loop() {
+			interceptor(ctx, nil, benchInfo, errHandler)
+		}
+	})
+
+	// Restore default.
+	responseTimeLogErrorOnly = false
+}
+
+func BenchmarkDefaultInterceptors(b *testing.B) {
+	resetGlobals()
+	ctx := grpcContext()
+	chain := DefaultInterceptors()
+
+	// Build a chained handler that applies all interceptors.
+	var chainedHandler grpc.UnaryHandler = noopHandler
+	for i := len(chain) - 1; i >= 0; i-- {
+		next := chainedHandler
+		interceptor := chain[i]
+		chainedHandler = func(ctx context.Context, req interface{}) (interface{}, error) {
+			return interceptor(ctx, req, benchInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
+				return next(ctx, req)
+			})
+		}
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for b.Loop() {
+		chainedHandler(ctx, nil)
+	}
 }
