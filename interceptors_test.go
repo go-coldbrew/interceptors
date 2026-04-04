@@ -1012,8 +1012,12 @@ func TestDoHTTPtoGRPC_InterceptorCaching(t *testing.T) {
 	}
 
 	// Call twice — interceptor should be built only once.
-	_, _ = DoHTTPtoGRPC(ctxWithRPC, nil, handler, "first")
-	_, _ = DoHTTPtoGRPC(ctxWithRPC, nil, handler, "second")
+	if _, err := DoHTTPtoGRPC(ctxWithRPC, nil, handler, "first"); err != nil {
+		t.Fatalf("first DoHTTPtoGRPC: %v", err)
+	}
+	if _, err := DoHTTPtoGRPC(ctxWithRPC, nil, handler, "second"); err != nil {
+		t.Fatalf("second DoHTTPtoGRPC: %v", err)
+	}
 
 	// Adding a new interceptor after first call should NOT affect the cached chain.
 	interceptor2Called := false
@@ -1022,7 +1026,9 @@ func TestDoHTTPtoGRPC_InterceptorCaching(t *testing.T) {
 		return handler(ctx, req)
 	})
 
-	_, _ = DoHTTPtoGRPC(ctxWithRPC, nil, handler, "third")
+	if _, err := DoHTTPtoGRPC(ctxWithRPC, nil, handler, "third"); err != nil {
+		t.Fatalf("third DoHTTPtoGRPC: %v", err)
+	}
 	if interceptor2Called {
 		t.Error("interceptor added after first DoHTTPtoGRPC call should not be in the cached chain")
 	}
