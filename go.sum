@@ -169,8 +169,8 @@ github.com/ghostiam/protogetter v0.3.20 h1:oW7OPFit2FxZOpmMRPP9FffU4uUpfeE/rEdE1
 github.com/ghostiam/protogetter v0.3.20/go.mod h1:FjIu5Yfs6FT391m+Fjp3fbAYJ6rkL/J6ySpZBfnODuI=
 github.com/gliderlabs/ssh v0.3.8 h1:a4YXD1V7xMF9g5nTkdfnja3Sxy1PVDCj1Zg4Wb8vY6c=
 github.com/gliderlabs/ssh v0.3.8/go.mod h1:xYoytBv1sV0aL3CavoDuJIQNURXkkfPA/wxQ1pL1fAU=
-github.com/go-coldbrew/errors v0.2.10 h1:UpjttE9ukev6UVGukolwI28IrxULPmN3J03jGDrZui4=
-github.com/go-coldbrew/errors v0.2.10/go.mod h1:2/34DuM3Bh+xjBaMc+zjEESypdtz7J9MPoQJwRmaHI4=
+github.com/go-coldbrew/errors v0.2.12 h1:pySZsaQgH+UoTWkytpIVgvnmMR0kL27VzJtTusUGMZA=
+github.com/go-coldbrew/errors v0.2.12/go.mod h1:eFLqeTPhgGyvsVVRXcdKGUxEnm+chrpddhL8lfogonk=
 github.com/go-coldbrew/log v0.3.0 h1:oYaAq6rS4hJGMVUQgF0xav2uw3LZeMcQrnKQcUl9Vaw=
 github.com/go-coldbrew/log v0.3.0/go.mod h1:xxZGHBfni5eXc6Azg+g8UPTmqTJLAf9sX46gAT8o39Y=
 github.com/go-coldbrew/options v0.3.0 h1:JwyVntb9bzBeFdaHFK6yGVVz30G3aVlqJJ6uVyYQfCc=
