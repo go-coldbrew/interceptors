@@ -24,11 +24,11 @@ import (
 	"github.com/go-coldbrew/options"
 	nrutil "github.com/go-coldbrew/tracing/newrelic"
 	grpcprom "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
-	"github.com/prometheus/client_golang/prometheus"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/newrelic/go-agent/v3/integrations/nrgrpc"
 	newrelic "github.com/newrelic/go-agent/v3/newrelic"
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 )
@@ -47,14 +47,14 @@ var (
 	// Use SetFilterMethods instead. Only some direct mutations (replacing the slice
 	// or changing the first element) are detected by internal change detection;
 	// other in-place changes may not invalidate caches correctly.
-	FilterMethods            = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
-	defaultFilterFunc        = FilterMethodsFunc
-	unaryServerInterceptors  = []grpc.UnaryServerInterceptor{}
-	streamServerInterceptors = []grpc.StreamServerInterceptor{}
-	useCBServerInterceptors  = true
-	unaryClientInterceptors  = []grpc.UnaryClientInterceptor{}
-	streamClientInterceptors = []grpc.StreamClientInterceptor{}
-	useCBClientInterceptors  = true
+	FilterMethods                          = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
+	defaultFilterFunc                      = FilterMethodsFunc
+	unaryServerInterceptors                = []grpc.UnaryServerInterceptor{}
+	streamServerInterceptors               = []grpc.StreamServerInterceptor{}
+	useCBServerInterceptors                = true
+	unaryClientInterceptors                = []grpc.UnaryClientInterceptor{}
+	streamClientInterceptors               = []grpc.StreamClientInterceptor{}
+	useCBClientInterceptors                = true
 	responseTimeLogLevel     loggers.Level = loggers.InfoLevel
 	responseTimeLogErrorOnly bool
 	srvMetricsOpts           []grpcprom.ServerMetricsOption
@@ -307,25 +307,6 @@ func chainStreamClient(interceptors []grpc.StreamClientInterceptor) grpc.StreamC
 	}
 }
 
-// DoHTTPtoGRPC allows calling the interceptors when you use the Register<svc-name>HandlerServer in grpc-gateway.
-// The interceptor chain is cached on first invocation. All interceptor configuration
-// (AddUnaryServerInterceptor, SetFilterFunc, etc.) must be finalized before the first call.
-// See example below for reference
-//
-//	func (s *svc) Echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
-//	    handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-//	        return s.echo(ctx, req.(*proto.EchoRequest))
-//	    }
-//	    r, e := doHTTPtoGRPC(ctx, s, handler, req)
-//	    if e != nil {
-//	        return nil, e.(error)
-//	    }
-//	    return r.(*proto.EchoResponse), nil
-//	}
-//
-//	func (s *svc) echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
-//	       .... implementation ....
-//	}
 var (
 	httpToGRPCOnce        sync.Once
 	httpToGRPCInterceptor grpc.UnaryServerInterceptor
@@ -338,6 +319,27 @@ func getHTTPtoGRPCInterceptor() grpc.UnaryServerInterceptor {
 	return httpToGRPCInterceptor
 }
 
+// DoHTTPtoGRPC allows calling the interceptors when you use the Register<svc-name>HandlerServer in grpc-gateway.
+// This enables in-process HTTP-to-gRPC calls with the full interceptor chain (logging, tracing, metrics,
+// panic recovery) without a network hop — the fastest option for gateway performance.
+// The interceptor chain is cached on first invocation. All interceptor configuration
+// (AddUnaryServerInterceptor, SetFilterFunc, etc.) must be finalized before the first call.
+// See example below for reference.
+//
+//	func (s *svc) Echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
+//	    handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+//	        return s.echo(ctx, req.(*proto.EchoRequest))
+//	    }
+//	    r, err := DoHTTPtoGRPC(ctx, s, handler, req)
+//	    if err != nil {
+//	        return nil, err
+//	    }
+//	    return r.(*proto.EchoResponse), nil
+//	}
+//
+//	func (s *svc) echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
+//	       .... implementation ....
+//	}
 func DoHTTPtoGRPC(ctx context.Context, svr interface{}, handler func(ctx context.Context, req interface{}) (interface{}, error), in interface{}) (interface{}, error) {
 	method, ok := runtime.RPCMethod(ctx)
 	if ok {
@@ -473,7 +475,7 @@ func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor {
 func OptionsInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		ctx = options.AddToOptions(ctx, "", "")
-		//loggers.AddToLogContext(ctx, "transport", "gRPC")
+		// loggers.AddToLogContext(ctx, "transport", "gRPC")
 		return handler(ctx, req)
 	}
 }
@@ -664,7 +666,6 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 			})
 		}
 		return err
-
 	}
 }
 

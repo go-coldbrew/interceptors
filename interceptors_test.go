@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/go-coldbrew/log/loggers"
@@ -41,6 +42,8 @@ func resetGlobals() {
 	useCBClientInterceptors = true
 	responseTimeLogErrorOnly = false
 	responseTimeLogLevel = loggers.InfoLevel
+	httpToGRPCOnce = sync.Once{}
+	httpToGRPCInterceptor = nil
 }
 
 func TestFilterMethodsFunc(t *testing.T) {
@@ -812,5 +815,223 @@ func TestResponseTimeLogErrorOnly_LogsErrors(t *testing.T) {
 	}
 	if err != testErr {
 		t.Fatalf("expected handler error, got %v", err)
+	}
+}
+
+func TestDoHTTPtoGRPC_HandlerError(t *testing.T) {
+	defer resetGlobals()
+	UseColdBrewServerInterceptors(context.Background(), false)
+
+	testErr := errors.New("handler failed")
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return nil, testErr
+	}
+
+	// Without RPCMethod — error should propagate directly.
+	resp, err := DoHTTPtoGRPC(context.Background(), nil, handler, "input")
+	if err != testErr {
+		t.Fatalf("expected testErr, got %v", err)
+	}
+	if resp != nil {
+		t.Fatalf("expected nil resp, got %v", resp)
+	}
+
+	// With RPCMethod — error should propagate through interceptor chain.
+	req, _ := http.NewRequest("GET", "http://localhost/test", nil)
+	mux := runtime.NewServeMux()
+	ctxWithRPC, err := runtime.AnnotateIncomingContext(context.Background(), mux, req, "/test.Service/Echo")
+	if err != nil {
+		t.Fatalf("AnnotateIncomingContext: %v", err)
+	}
+	resp, err = DoHTTPtoGRPC(ctxWithRPC, nil, handler, "input")
+	if err != testErr {
+		t.Fatalf("expected testErr through chain, got %v", err)
+	}
+	if resp != nil {
+		t.Fatalf("expected nil resp through chain, got %v", resp)
+	}
+}
+
+func TestDoHTTPtoGRPC_MethodPassedToInfo(t *testing.T) {
+	defer resetGlobals()
+	UseColdBrewServerInterceptors(context.Background(), false)
+
+	var capturedMethod string
+	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		capturedMethod = info.FullMethod
+		return handler(ctx, req)
+	})
+
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return "ok", nil
+	}
+
+	req, _ := http.NewRequest("GET", "http://localhost/test", nil)
+	mux := runtime.NewServeMux()
+	ctxWithRPC, err := runtime.AnnotateIncomingContext(context.Background(), mux, req, "/test.Service/Echo")
+	if err != nil {
+		t.Fatalf("AnnotateIncomingContext: %v", err)
+	}
+
+	_, err = DoHTTPtoGRPC(ctxWithRPC, nil, handler, "input")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedMethod != "/test.Service/Echo" {
+		t.Errorf("expected FullMethod '/test.Service/Echo', got %q", capturedMethod)
+	}
+}
+
+func TestDoHTTPtoGRPC_InputPassedThrough(t *testing.T) {
+	defer resetGlobals()
+	UseColdBrewServerInterceptors(context.Background(), false)
+
+	var capturedReq interface{}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		capturedReq = req
+		return "ok", nil
+	}
+
+	// Without RPCMethod — input goes directly to handler.
+	if _, err := DoHTTPtoGRPC(context.Background(), nil, handler, "direct-input"); err != nil {
+		t.Fatalf("DoHTTPtoGRPC without RPCMethod: %v", err)
+	}
+	if capturedReq != "direct-input" {
+		t.Errorf("expected 'direct-input', got %v", capturedReq)
+	}
+
+	// With RPCMethod — input goes through interceptor chain.
+	capturedReq = nil
+	req, _ := http.NewRequest("GET", "http://localhost/test", nil)
+	mux := runtime.NewServeMux()
+	ctxWithRPC, err := runtime.AnnotateIncomingContext(context.Background(), mux, req, "/test.Service/Echo")
+	if err != nil {
+		t.Fatalf("AnnotateIncomingContext: %v", err)
+	}
+	_, err = DoHTTPtoGRPC(ctxWithRPC, nil, handler, "chain-input")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedReq != "chain-input" {
+		t.Errorf("expected 'chain-input', got %v", capturedReq)
+	}
+}
+
+func TestDoHTTPtoGRPC_ServerPassedToInfo(t *testing.T) {
+	defer resetGlobals()
+	UseColdBrewServerInterceptors(context.Background(), false)
+
+	type fakeServer struct{ Name string }
+	svr := &fakeServer{Name: "test-server"}
+
+	var capturedServer interface{}
+	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		capturedServer = info.Server
+		return handler(ctx, req)
+	})
+
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return "ok", nil
+	}
+
+	req, _ := http.NewRequest("GET", "http://localhost/test", nil)
+	mux := runtime.NewServeMux()
+	ctxWithRPC, err := runtime.AnnotateIncomingContext(context.Background(), mux, req, "/test.Service/Echo")
+	if err != nil {
+		t.Fatalf("AnnotateIncomingContext: %v", err)
+	}
+
+	_, err = DoHTTPtoGRPC(ctxWithRPC, svr, handler, "input")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedServer != svr {
+		t.Errorf("expected server %v, got %v", svr, capturedServer)
+	}
+}
+
+func TestDoHTTPtoGRPC_Concurrent(t *testing.T) {
+	defer resetGlobals()
+	UseColdBrewServerInterceptors(context.Background(), false)
+
+	var callCount int64
+	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		atomic.AddInt64(&callCount, 1)
+		return handler(ctx, req)
+	})
+
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return req, nil
+	}
+
+	req, _ := http.NewRequest("GET", "http://localhost/test", nil)
+	mux := runtime.NewServeMux()
+	ctxWithRPC, err := runtime.AnnotateIncomingContext(context.Background(), mux, req, "/test.Service/Echo")
+	if err != nil {
+		t.Fatalf("AnnotateIncomingContext: %v", err)
+	}
+
+	const goroutines = 50
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			resp, err := DoHTTPtoGRPC(ctxWithRPC, nil, handler, fmt.Sprintf("req-%d", n))
+			if err != nil {
+				t.Errorf("goroutine %d: unexpected error: %v", n, err)
+			}
+			expected := fmt.Sprintf("req-%d", n)
+			if resp != expected {
+				t.Errorf("goroutine %d: expected %q, got %v", n, expected, resp)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	if got := atomic.LoadInt64(&callCount); got != goroutines {
+		t.Errorf("expected %d interceptor calls, got %d", goroutines, got)
+	}
+}
+
+func TestDoHTTPtoGRPC_InterceptorCaching(t *testing.T) {
+	defer resetGlobals()
+	UseColdBrewServerInterceptors(context.Background(), false)
+
+	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		return handler(ctx, req)
+	})
+
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return "ok", nil
+	}
+
+	req, _ := http.NewRequest("GET", "http://localhost/test", nil)
+	mux := runtime.NewServeMux()
+	ctxWithRPC, err := runtime.AnnotateIncomingContext(context.Background(), mux, req, "/test.Service/Echo")
+	if err != nil {
+		t.Fatalf("AnnotateIncomingContext: %v", err)
+	}
+
+	// Call twice — interceptor should be built only once.
+	if _, err := DoHTTPtoGRPC(ctxWithRPC, nil, handler, "first"); err != nil {
+		t.Fatalf("first DoHTTPtoGRPC: %v", err)
+	}
+	if _, err := DoHTTPtoGRPC(ctxWithRPC, nil, handler, "second"); err != nil {
+		t.Fatalf("second DoHTTPtoGRPC: %v", err)
+	}
+
+	// Adding a new interceptor after first call should NOT affect the cached chain.
+	interceptor2Called := false
+	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		interceptor2Called = true
+		return handler(ctx, req)
+	})
+
+	if _, err := DoHTTPtoGRPC(ctxWithRPC, nil, handler, "third"); err != nil {
+		t.Fatalf("third DoHTTPtoGRPC: %v", err)
+	}
+	if interceptor2Called {
+		t.Error("interceptor added after first DoHTTPtoGRPC call should not be in the cached chain")
 	}
 }
