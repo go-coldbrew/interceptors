@@ -996,7 +996,6 @@ func TestDoHTTPtoGRPC_InterceptorCaching(t *testing.T) {
 	defer resetGlobals()
 	UseColdBrewServerInterceptors(context.Background(), false)
 
-	buildCount := 0
 	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		return handler(ctx, req)
 	})
@@ -1027,5 +1026,4 @@ func TestDoHTTPtoGRPC_InterceptorCaching(t *testing.T) {
 	if interceptor2Called {
 		t.Error("interceptor added after first DoHTTPtoGRPC call should not be in the cached chain")
 	}
-	_ = buildCount // used for documentation clarity
 }

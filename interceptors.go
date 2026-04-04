@@ -324,7 +324,7 @@ func getHTTPtoGRPCInterceptor() grpc.UnaryServerInterceptor {
 // panic recovery) without a network hop — the fastest option for gateway performance.
 // The interceptor chain is cached on first invocation. All interceptor configuration
 // (AddUnaryServerInterceptor, SetFilterFunc, etc.) must be finalized before the first call.
-// See example below for reference
+// See example below for reference.
 //
 //	func (s *svc) Echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
 //	    handler := func(ctx context.Context, req interface{}) (interface{}, error) {

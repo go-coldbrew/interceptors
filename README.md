@@ -185,7 +185,7 @@ DefaultStreamInterceptors are the set of default interceptors that should be app
 func DoHTTPtoGRPC(ctx context.Context, svr interface{}, handler func(ctx context.Context, req interface{}) (interface{}, error), in interface{}) (interface{}, error)
 ```
 
-DoHTTPtoGRPC allows calling the interceptors when you use the Register\<svc\-name\>HandlerServer in grpc\-gateway. This enables in\-process HTTP\-to\-gRPC calls with the full interceptor chain \(logging, tracing, metrics, panic recovery\) without a network hop — the fastest option for gateway performance. The interceptor chain is cached on first invocation. All interceptor configuration \(AddUnaryServerInterceptor, SetFilterFunc, etc.\) must be finalized before the first call. See example below for reference
+DoHTTPtoGRPC allows calling the interceptors when you use the Register\<svc\-name\>HandlerServer in grpc\-gateway. This enables in\-process HTTP\-to\-gRPC calls with the full interceptor chain \(logging, tracing, metrics, panic recovery\) without a network hop — the fastest option for gateway performance. The interceptor chain is cached on first invocation. All interceptor configuration \(AddUnaryServerInterceptor, SetFilterFunc, etc.\) must be finalized before the first call. See example below for reference.
 
 ```
 func (s *svc) Echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
