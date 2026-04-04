@@ -893,7 +893,9 @@ func TestDoHTTPtoGRPC_InputPassedThrough(t *testing.T) {
 	}
 
 	// Without RPCMethod — input goes directly to handler.
-	_, _ = DoHTTPtoGRPC(context.Background(), nil, handler, "direct-input")
+	if _, err := DoHTTPtoGRPC(context.Background(), nil, handler, "direct-input"); err != nil {
+		t.Fatalf("DoHTTPtoGRPC without RPCMethod: %v", err)
+	}
 	if capturedReq != "direct-input" {
 		t.Errorf("expected 'direct-input', got %v", capturedReq)
 	}
