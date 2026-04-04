@@ -308,6 +308,8 @@ func chainStreamClient(interceptors []grpc.StreamClientInterceptor) grpc.StreamC
 }
 
 // DoHTTPtoGRPC allows calling the interceptors when you use the Register<svc-name>HandlerServer in grpc-gateway.
+// This enables in-process HTTP-to-gRPC calls with the full interceptor chain (logging, tracing, metrics,
+// panic recovery) without a network hop — the fastest option for gateway performance.
 // The interceptor chain is cached on first invocation. All interceptor configuration
 // (AddUnaryServerInterceptor, SetFilterFunc, etc.) must be finalized before the first call.
 // See example below for reference
@@ -316,9 +318,9 @@ func chainStreamClient(interceptors []grpc.StreamClientInterceptor) grpc.StreamC
 //	    handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 //	        return s.echo(ctx, req.(*proto.EchoRequest))
 //	    }
-//	    r, e := doHTTPtoGRPC(ctx, s, handler, req)
-//	    if e != nil {
-//	        return nil, e.(error)
+//	    r, err := DoHTTPtoGRPC(ctx, s, handler, req)
+//	    if err != nil {
+//	        return nil, err
 //	    }
 //	    return r.(*proto.EchoResponse), nil
 //	}
