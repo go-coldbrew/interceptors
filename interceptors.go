@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -264,12 +265,12 @@ func getClientMetrics() *grpcprom.ClientMetrics {
 
 // chainUnaryServer chains multiple unary server interceptors into one.
 func chainUnaryServer(interceptors []grpc.UnaryServerInterceptor) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		chain := handler
 		for i := len(interceptors) - 1; i >= 0; i-- {
 			interceptor := interceptors[i]
 			next := chain
-			chain = func(ctx context.Context, req interface{}) (interface{}, error) {
+			chain = func(ctx context.Context, req any) (any, error) {
 				return interceptor(ctx, req, info, next)
 			}
 		}
@@ -279,12 +280,12 @@ func chainUnaryServer(interceptors []grpc.UnaryServerInterceptor) grpc.UnaryServ
 
 // chainUnaryClient chains multiple unary client interceptors into one.
 func chainUnaryClient(interceptors []grpc.UnaryClientInterceptor) grpc.UnaryClientInterceptor {
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		chain := invoker
 		for i := len(interceptors) - 1; i >= 0; i-- {
 			interceptor := interceptors[i]
 			next := chain
-			chain = func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+			chain = func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 				return interceptor(ctx, method, req, reply, cc, next, opts...)
 			}
 		}
@@ -340,7 +341,7 @@ func getHTTPtoGRPCInterceptor() grpc.UnaryServerInterceptor {
 //	func (s *svc) echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
 //	       .... implementation ....
 //	}
-func DoHTTPtoGRPC(ctx context.Context, svr interface{}, handler func(ctx context.Context, req interface{}) (interface{}, error), in interface{}) (interface{}, error) {
+func DoHTTPtoGRPC(ctx context.Context, svr any, handler func(ctx context.Context, req any) (any, error), in any) (any, error) {
 	method, ok := runtime.RPCMethod(ctx)
 	if ok {
 		interceptor := getHTTPtoGRPCInterceptor()
@@ -373,7 +374,7 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 }
 
 // DefaultClientInterceptors are the set of default interceptors that should be applied to all client calls
-func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInterceptor {
+func DefaultClientInterceptors(defaultOpts ...any) []grpc.UnaryClientInterceptor {
 	ints := []grpc.UnaryClientInterceptor{}
 	if len(unaryClientInterceptors) > 0 {
 		ints = append(ints, unaryClientInterceptors...)
@@ -399,7 +400,7 @@ func DefaultClientInterceptors(defaultOpts ...interface{}) []grpc.UnaryClientInt
 }
 
 // DefaultClientStreamInterceptors are the set of default interceptors that should be applied to all stream client calls
-func DefaultClientStreamInterceptors(defaultOpts ...interface{}) []grpc.StreamClientInterceptor {
+func DefaultClientStreamInterceptors(defaultOpts ...any) []grpc.StreamClientInterceptor {
 	ints := []grpc.StreamClientInterceptor{}
 	if len(streamClientInterceptors) > 0 {
 		ints = append(ints, streamClientInterceptors...)
@@ -430,18 +431,18 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 }
 
 // DefaultClientInterceptor are the set of default interceptors that should be applied to all client calls
-func DefaultClientInterceptor(defaultOpts ...interface{}) grpc.UnaryClientInterceptor {
+func DefaultClientInterceptor(defaultOpts ...any) grpc.UnaryClientInterceptor {
 	return chainUnaryClient(DefaultClientInterceptors(defaultOpts...))
 }
 
 // DefaultClientStreamInterceptor are the set of default interceptors that should be applied to all stream client calls
-func DefaultClientStreamInterceptor(defaultOpts ...interface{}) grpc.StreamClientInterceptor {
+func DefaultClientStreamInterceptor(defaultOpts ...any) grpc.StreamClientInterceptor {
 	return chainStreamClient(DefaultClientStreamInterceptors(defaultOpts...))
 }
 
 // DebugLoggingInterceptor is the interceptor that logs all request/response from a handler
 func DebugLoggingInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		log.Debug(ctx, "method", info.FullMethod, "request", req)
 		resp, err := handler(ctx, req)
 		log.Debug(ctx, "method", info.FullMethod, "response", resp, "err", err)
@@ -451,7 +452,7 @@ func DebugLoggingInterceptor() grpc.UnaryServerInterceptor {
 
 // ResponseTimeLoggingInterceptor logs response time for each request on server
 func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		ctx = loggers.AddToLogContext(ctx, "grpcMethod", info.FullMethod)
 		defer func(ctx context.Context, method string, begin time.Time) {
 			if ff != nil && !ff(ctx, method) {
@@ -473,7 +474,7 @@ func ResponseTimeLoggingInterceptor(ff FilterFunc) grpc.UnaryServerInterceptor {
 }
 
 func OptionsInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		ctx = options.AddToOptions(ctx, "", "")
 		// loggers.AddToLogContext(ctx, "transport", "gRPC")
 		return handler(ctx, req)
@@ -486,12 +487,12 @@ func OptionsInterceptor() grpc.UnaryServerInterceptor {
 func NewRelicInterceptor() grpc.UnaryServerInterceptor {
 	app := nrutil.GetNewRelicApp()
 	if app == nil {
-		return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 			return handler(ctx, req)
 		}
 	}
 	nrh := nrgrpc.UnaryServerInterceptor(app)
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		if defaultFilterFunc(ctx, info.FullMethod) {
 			return nrh(ctx, req, info, handler)
 		} else {
@@ -502,7 +503,7 @@ func NewRelicInterceptor() grpc.UnaryServerInterceptor {
 
 // ServerErrorInterceptor intercepts all server actions and reports them to error notifier
 func ServerErrorInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		// set trace id if not set
 		ctx, _ = notifier.SetTraceIdWithValue(ctx)
 		start := time.Now()
@@ -518,7 +519,7 @@ func ServerErrorInterceptor() grpc.UnaryServerInterceptor {
 }
 
 func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		defer func(ctx context.Context) {
 			// panic handler
 			if r := recover(); r != nil {
@@ -545,11 +546,11 @@ func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor {
 func NewRelicClientInterceptor() grpc.UnaryClientInterceptor {
 	app := nrutil.GetNewRelicApp()
 	if app == nil {
-		return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 			return invoker(ctx, method, req, reply, cc, opts...)
 		}
 	}
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		if defaultFilterFunc(ctx, method) {
 			return nrgrpc.UnaryClientInterceptor(ctx, method, req, reply, cc, invoker, opts...)
 		} else {
@@ -561,8 +562,8 @@ func NewRelicClientInterceptor() grpc.UnaryClientInterceptor {
 // Deprecated: GRPCClientInterceptor is no longer needed. gRPC tracing is now handled
 // by otelgrpc.NewClientHandler stats handler configured at the client level.
 // This function is retained for backwards compatibility but returns a no-op interceptor.
-func GRPCClientInterceptor(_ ...interface{}) grpc.UnaryClientInterceptor {
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+func GRPCClientInterceptor(_ ...any) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 }
@@ -576,7 +577,7 @@ func GRPCClientInterceptor(_ ...interface{}) grpc.UnaryClientInterceptor {
 // If Hystrix is disabled via options, the RPC is invoked directly. If the underlying RPC returns an error that matches any configured excluded error or whose gRPC status code matches any configured excluded code, Hystrix fallback is skipped and the RPC error is returned.
 // Panics raised during the RPC invocation are captured and reported to the notifier before being converted into an error. If the RPC itself returns an error, that error is returned; otherwise any error produced by Hystrix is returned.
 func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientInterceptor {
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		options := clientOptions{
 			hystrixName: method,
 		}
@@ -617,10 +618,8 @@ func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientIn
 				}
 			}
 			if st, ok := status.FromError(invokerErr); ok {
-				for _, code := range options.excludedCodes {
-					if st.Code() == code {
-						return nil
-					}
+				if slices.Contains(options.excludedCodes, st.Code()) {
+					return nil
 				}
 			}
 			return invokerErr
@@ -634,7 +633,7 @@ func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientIn
 
 // ResponseTimeLoggingStreamInterceptor logs response time for stream RPCs.
 func ResponseTimeLoggingStreamInterceptor() grpc.StreamServerInterceptor {
-	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
+	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 		defer func(begin time.Time) {
 			if responseTimeLogErrorOnly && err == nil {
 				return
@@ -654,7 +653,7 @@ func ResponseTimeLoggingStreamInterceptor() grpc.StreamServerInterceptor {
 // ServerErrorStreamInterceptor intercepts server errors for stream RPCs and
 // reports them to the error notifier.
 func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
-	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
+	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 		ctx := stream.Context()
 		ctx, _ = notifier.SetTraceIdWithValue(ctx)
 		start := time.Now()
@@ -693,7 +692,7 @@ func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
 
 // TraceIdInterceptor allows injecting trace id from request objects
 func TraceIdInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		if req != nil {
 			// fetch and update trace id from request
 			if r, ok := req.(interface{ GetTraceId() string }); ok {
