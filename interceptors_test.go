@@ -18,10 +18,10 @@ import (
 // mockStream implements grpc.ServerTransportStream for testing.
 type mockStream struct{ method string }
 
-func (s *mockStream) Method() string                    { return s.method }
-func (s *mockStream) SetHeader(grpcmd.MD) error         { return nil }
-func (s *mockStream) SendHeader(grpcmd.MD) error        { return nil }
-func (s *mockStream) SetTrailer(grpcmd.MD) error        { return nil }
+func (s *mockStream) Method() string             { return s.method }
+func (s *mockStream) SetHeader(grpcmd.MD) error  { return nil }
+func (s *mockStream) SendHeader(grpcmd.MD) error { return nil }
+func (s *mockStream) SetTrailer(grpcmd.MD) error { return nil }
 
 // grpcContext returns a context that grpc.Method() recognizes as a gRPC server context.
 func grpcContext() context.Context {
@@ -132,7 +132,7 @@ func TestFilterMethodsFunc_HTTPPathNotCached(t *testing.T) {
 	// Verify nothing was cached.
 	f := currentFilter.Load()
 	cached := 0
-	f.cache.Range(func(_, _ interface{}) bool {
+	f.cache.Range(func(_, _ any) bool {
 		cached++
 		return true
 	})
@@ -146,7 +146,7 @@ func TestAddUnaryServerInterceptor(t *testing.T) {
 
 	ctx := context.Background()
 	called := false
-	interceptor := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	interceptor := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		called = true
 		return handler(ctx, req)
 	}
@@ -160,7 +160,7 @@ func TestAddUnaryServerInterceptor(t *testing.T) {
 
 	// The user interceptor should be the first one.
 	info := &grpc.UnaryServerInfo{FullMethod: "/test/Method"}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return "ok", nil
 	}
 	_, _ = ints[0](ctx, nil, info, handler)
@@ -182,7 +182,7 @@ func TestDefaultInterceptors_Disabled(t *testing.T) {
 
 	// Add a user interceptor and verify it still shows up.
 	userCalled := false
-	AddUnaryServerInterceptor(ctx, func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	AddUnaryServerInterceptor(ctx, func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		userCalled = true
 		return handler(ctx, req)
 	})
@@ -192,7 +192,7 @@ func TestDefaultInterceptors_Disabled(t *testing.T) {
 	}
 
 	info := &grpc.UnaryServerInfo{FullMethod: "/test/Method"}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return "ok", nil
 	}
 	_, _ = ints[0](ctx, nil, info, handler)
@@ -206,7 +206,7 @@ func TestPanicRecoveryInterceptor(t *testing.T) {
 	interceptor := PanicRecoveryInterceptor()
 	info := &grpc.UnaryServerInfo{FullMethod: "/test/Panic"}
 
-	panicHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	panicHandler := func(ctx context.Context, req any) (any, error) {
 		panic("test panic")
 	}
 
@@ -224,7 +224,7 @@ func TestPanicRecoveryInterceptor(t *testing.T) {
 
 	// Panic with an error value should return that error.
 	errPanic := fmt.Errorf("error panic")
-	panicHandler2 := func(ctx context.Context, req interface{}) (interface{}, error) {
+	panicHandler2 := func(ctx context.Context, req any) (any, error) {
 		panic(errPanic)
 	}
 	_, err = interceptor(ctx, nil, info, panicHandler2)
@@ -239,7 +239,7 @@ func TestResponseTimeLoggingInterceptor(t *testing.T) {
 	info := &grpc.UnaryServerInfo{FullMethod: "/test/Method"}
 
 	handlerCalled := false
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		handlerCalled = true
 		return "response", nil
 	}
@@ -262,7 +262,7 @@ func TestDebugLoggingInterceptor(t *testing.T) {
 	info := &grpc.UnaryServerInfo{FullMethod: "/test/Debug"}
 
 	handlerCalled := false
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		handlerCalled = true
 		return "debug_resp", nil
 	}
@@ -287,7 +287,7 @@ func TestDoHTTPtoGRPC(t *testing.T) {
 	UseColdBrewServerInterceptors(ctx, false)
 
 	handlerCalled := false
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		handlerCalled = true
 		return "result", nil
 	}
@@ -308,7 +308,7 @@ func TestDoHTTPtoGRPC(t *testing.T) {
 	// the interceptor chain should NOT be invoked.
 	handlerCalled = false
 	interceptorCalled := false
-	AddUnaryServerInterceptor(ctx, func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	AddUnaryServerInterceptor(ctx, func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		interceptorCalled = true
 		return handler(ctx, req)
 	})
@@ -356,7 +356,7 @@ func TestHystrixClientInterceptor(t *testing.T) {
 	t.Run("basic invocation", func(t *testing.T) {
 		interceptor := HystrixClientInterceptor()
 		invokerCalled := false
-		invoker := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		invoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 			invokerCalled = true
 			return nil
 		}
@@ -373,7 +373,7 @@ func TestHystrixClientInterceptor(t *testing.T) {
 	t.Run("WithoutHystrix short-circuits", func(t *testing.T) {
 		interceptor := HystrixClientInterceptor()
 		invokerCalled := false
-		invoker := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		invoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 			invokerCalled = true
 			return nil
 		}
@@ -391,7 +391,7 @@ func TestHystrixClientInterceptor(t *testing.T) {
 func TestChainUnaryServer(t *testing.T) {
 	var order []int
 	makeInterceptor := func(id int) grpc.UnaryServerInterceptor {
-		return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 			order = append(order, id)
 			return handler(ctx, req)
 		}
@@ -404,7 +404,7 @@ func TestChainUnaryServer(t *testing.T) {
 	})
 
 	info := &grpc.UnaryServerInfo{FullMethod: "/test/Chain"}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		order = append(order, 0) // handler marker
 		return "ok", nil
 	}
@@ -424,7 +424,7 @@ func TestChainUnaryServer(t *testing.T) {
 func TestChainUnaryClient(t *testing.T) {
 	var order []int
 	makeInterceptor := func(id int) grpc.UnaryClientInterceptor {
-		return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 			order = append(order, id)
 			return invoker(ctx, method, req, reply, cc, opts...)
 		}
@@ -436,7 +436,7 @@ func TestChainUnaryClient(t *testing.T) {
 		makeInterceptor(3),
 	})
 
-	invoker := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+	invoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 		order = append(order, 0)
 		return nil
 	}
@@ -485,24 +485,22 @@ func TestChainStreamClient(t *testing.T) {
 // Run with -race to detect violations.
 func TestChainUnaryServerConcurrent(t *testing.T) {
 	chain := chainUnaryServer([]grpc.UnaryServerInterceptor{
-		func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 			return handler(ctx, req.(string)+"-A")
 		},
-		func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 			return handler(ctx, req.(string)+"-B")
 		},
 	})
 
 	info := &grpc.UnaryServerInfo{FullMethod: "/test/Concurrent"}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return req.(string) + "-handler", nil
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 100 {
+		wg.Go(func() {
 			resp, err := chain(context.Background(), "start", info, handler)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
@@ -510,7 +508,7 @@ func TestChainUnaryServerConcurrent(t *testing.T) {
 			if resp != "start-A-B-handler" {
 				t.Errorf("expected 'start-A-B-handler', got %v", resp)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }
@@ -519,21 +517,19 @@ func TestChainUnaryServerConcurrent(t *testing.T) {
 // for concurrent use and produces the correct output from each goroutine.
 func TestChainUnaryClientConcurrent(t *testing.T) {
 	chain := chainUnaryClient([]grpc.UnaryClientInterceptor{
-		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 			return invoker(ctx, method+"-A", req, reply, cc, opts...)
 		},
-		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 			return invoker(ctx, method+"-B", req, reply, cc, opts...)
 		},
 	})
 
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 100 {
+		wg.Go(func() {
 			var got string
-			invoker := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+			invoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 				got = method
 				return nil
 			}
@@ -544,7 +540,7 @@ func TestChainUnaryClientConcurrent(t *testing.T) {
 			if got != "/svc/Call-A-B" {
 				t.Errorf("expected '/svc/Call-A-B', got %v", got)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }
@@ -562,10 +558,8 @@ func TestChainStreamClientConcurrent(t *testing.T) {
 	})
 
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 100 {
+		wg.Go(func() {
 			var got string
 			streamer := func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 				got = method
@@ -578,7 +572,7 @@ func TestChainStreamClientConcurrent(t *testing.T) {
 			if got != "/svc/Stream-A-B" {
 				t.Errorf("expected '/svc/Stream-A-B', got %v", got)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }
@@ -587,7 +581,7 @@ func TestGRPCClientInterceptorNoOp(t *testing.T) {
 	interceptor := GRPCClientInterceptor()
 
 	invoked := false
-	mockInvoker := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+	mockInvoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 		invoked = true
 		return nil
 	}
@@ -639,12 +633,12 @@ func BenchmarkFilterMethodsFunc(b *testing.B) {
 }
 
 // noopHandler is a handler that returns immediately with no error.
-var noopHandler grpc.UnaryHandler = func(ctx context.Context, req interface{}) (interface{}, error) {
+var noopHandler grpc.UnaryHandler = func(ctx context.Context, req any) (any, error) {
 	return "ok", nil
 }
 
 // errHandler is a handler that returns an error.
-var errHandler grpc.UnaryHandler = func(ctx context.Context, req interface{}) (interface{}, error) {
+var errHandler grpc.UnaryHandler = func(ctx context.Context, req any) (any, error) {
 	return nil, errors.New("test error")
 }
 
@@ -726,8 +720,8 @@ func BenchmarkDefaultInterceptors(b *testing.B) {
 	for i := len(chain) - 1; i >= 0; i-- {
 		next := chainedHandler
 		interceptor := chain[i]
-		chainedHandler = func(ctx context.Context, req interface{}) (interface{}, error) {
-			return interceptor(ctx, req, benchInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
+		chainedHandler = func(ctx context.Context, req any) (any, error) {
+			return interceptor(ctx, req, benchInfo, func(ctx context.Context, req any) (any, error) {
 				return next(ctx, req)
 			})
 		}
@@ -747,7 +741,7 @@ func TestNewRelicInterceptor_NilApp(t *testing.T) {
 	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
 
 	handlerCalled := false
-	resp, err := interceptor(ctx, "request", info, func(ctx context.Context, req interface{}) (interface{}, error) {
+	resp, err := interceptor(ctx, "request", info, func(ctx context.Context, req any) (any, error) {
 		handlerCalled = true
 		return "response", nil
 	})
@@ -765,7 +759,7 @@ func TestNewRelicClientInterceptor_NilApp(t *testing.T) {
 
 	invokerCalled := false
 	err := interceptor(context.Background(), "/test.Service/Method", nil, nil, nil,
-		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 			invokerCalled = true
 			return nil
 		})
@@ -786,7 +780,7 @@ func TestResponseTimeLogErrorOnly_SkipsSuccess(t *testing.T) {
 	ctx := grpcContext()
 	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
 
-	resp, err := interceptor(ctx, nil, info, func(ctx context.Context, req interface{}) (interface{}, error) {
+	resp, err := interceptor(ctx, nil, info, func(ctx context.Context, req any) (any, error) {
 		return "ok", nil
 	})
 	if resp != "ok" || err != nil {
@@ -807,7 +801,7 @@ func TestResponseTimeLogErrorOnly_LogsErrors(t *testing.T) {
 	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
 
 	testErr := errors.New("handler failed")
-	resp, err := interceptor(ctx, nil, info, func(ctx context.Context, req interface{}) (interface{}, error) {
+	resp, err := interceptor(ctx, nil, info, func(ctx context.Context, req any) (any, error) {
 		return nil, testErr
 	})
 	if resp != nil {
@@ -823,7 +817,7 @@ func TestDoHTTPtoGRPC_HandlerError(t *testing.T) {
 	UseColdBrewServerInterceptors(context.Background(), false)
 
 	testErr := errors.New("handler failed")
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return nil, testErr
 	}
 
@@ -857,12 +851,12 @@ func TestDoHTTPtoGRPC_MethodPassedToInfo(t *testing.T) {
 	UseColdBrewServerInterceptors(context.Background(), false)
 
 	var capturedMethod string
-	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		capturedMethod = info.FullMethod
 		return handler(ctx, req)
 	})
 
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return "ok", nil
 	}
 
@@ -886,8 +880,8 @@ func TestDoHTTPtoGRPC_InputPassedThrough(t *testing.T) {
 	defer resetGlobals()
 	UseColdBrewServerInterceptors(context.Background(), false)
 
-	var capturedReq interface{}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	var capturedReq any
+	handler := func(ctx context.Context, req any) (any, error) {
 		capturedReq = req
 		return "ok", nil
 	}
@@ -924,13 +918,13 @@ func TestDoHTTPtoGRPC_ServerPassedToInfo(t *testing.T) {
 	type fakeServer struct{ Name string }
 	svr := &fakeServer{Name: "test-server"}
 
-	var capturedServer interface{}
-	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	var capturedServer any
+	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		capturedServer = info.Server
 		return handler(ctx, req)
 	})
 
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return "ok", nil
 	}
 
@@ -955,12 +949,12 @@ func TestDoHTTPtoGRPC_Concurrent(t *testing.T) {
 	UseColdBrewServerInterceptors(context.Background(), false)
 
 	var callCount int64
-	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		atomic.AddInt64(&callCount, 1)
 		return handler(ctx, req)
 	})
 
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return req, nil
 	}
 
@@ -973,7 +967,7 @@ func TestDoHTTPtoGRPC_Concurrent(t *testing.T) {
 
 	const goroutines = 50
 	var wg sync.WaitGroup
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
@@ -998,11 +992,11 @@ func TestDoHTTPtoGRPC_InterceptorCaching(t *testing.T) {
 	defer resetGlobals()
 	UseColdBrewServerInterceptors(context.Background(), false)
 
-	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		return handler(ctx, req)
 	})
 
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return "ok", nil
 	}
 
@@ -1023,7 +1017,7 @@ func TestDoHTTPtoGRPC_InterceptorCaching(t *testing.T) {
 
 	// Adding a new interceptor after first call should NOT affect the cached chain.
 	interceptor2Called := false
-	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	AddUnaryServerInterceptor(context.Background(), func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		interceptor2Called = true
 		return handler(ctx, req)
 	})
