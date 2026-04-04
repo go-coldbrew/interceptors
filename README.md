@@ -185,7 +185,24 @@ DefaultStreamInterceptors are the set of default interceptors that should be app
 func DoHTTPtoGRPC(ctx context.Context, svr interface{}, handler func(ctx context.Context, req interface{}) (interface{}, error), in interface{}) (interface{}, error)
 ```
 
+DoHTTPtoGRPC allows calling the interceptors when you use the Register\<svc\-name\>HandlerServer in grpc\-gateway. This enables in\-process HTTP\-to\-gRPC calls with the full interceptor chain \(logging, tracing, metrics, panic recovery\) without a network hop — the fastest option for gateway performance. The interceptor chain is cached on first invocation. All interceptor configuration \(AddUnaryServerInterceptor, SetFilterFunc, etc.\) must be finalized before the first call. See example below for reference
 
+```
+func (s *svc) Echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
+    handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+        return s.echo(ctx, req.(*proto.EchoRequest))
+    }
+    r, err := DoHTTPtoGRPC(ctx, s, handler, req)
+    if err != nil {
+        return nil, err
+    }
+    return r.(*proto.EchoResponse), nil
+}
+
+func (s *svc) echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResponse, error) {
+       .... implementation ....
+}
+```
 
 <a name="FilterMethodsFunc"></a>
 ## func [FilterMethodsFunc](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L150>)
@@ -219,7 +236,7 @@ Note: This interceptor wraps github.com/afex/hystrix\-go which has been unmainta
 The interceptor applies provided default and per\-call client options to configure Hystrix behavior \(for example the command name, disabled flag, excluded errors, and excluded gRPC status codes\). If Hystrix is disabled via options, the RPC is invoked directly. If the underlying RPC returns an error that matches any configured excluded error or whose gRPC status code matches any configured excluded code, Hystrix fallback is skipped and the RPC error is returned. Panics raised during the RPC invocation are captured and reported to the notifier before being converted into an error. If the RPC itself returns an error, that error is returned; otherwise any error produced by Hystrix is returned.
 
 <a name="NRHttpTracer"></a>
-## func [NRHttpTracer](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L674>)
+## func [NRHttpTracer](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L673>)
 
 ```go
 func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
@@ -354,7 +371,7 @@ func SetServerMetricsOptions(opts ...grpcprom.ServerMetricsOption)
 SetServerMetricsOptions appends gRPC server metrics options \(histogram, labels, namespace, etc.\). Must be called during initialization, before the server starts. Not safe for concurrent use.
 
 <a name="TraceIdInterceptor"></a>
-## func [TraceIdInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L696>)
+## func [TraceIdInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L695>)
 
 ```go
 func TraceIdInterceptor() grpc.UnaryServerInterceptor
