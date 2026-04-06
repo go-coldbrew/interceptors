@@ -61,6 +61,7 @@ var (
 	responseTimeLogLevel     loggers.Level = loggers.InfoLevel
 	responseTimeLogErrorOnly bool
 	protoValidateOpts        []protovalidate.ValidatorOption
+	disableProtoValidate     bool
 	srvMetricsOpts           []grpcprom.ServerMetricsOption
 	cltMetricsOpts           []grpcprom.ClientMetricsOption
 	srvMetricsOnce           sync.Once
@@ -243,6 +244,12 @@ func SetProtoValidateOptions(opts ...protovalidate.ValidatorOption) {
 	protoValidateOpts = append(protoValidateOpts, opts...)
 }
 
+// SetDisableProtoValidate disables the protovalidate interceptor in the
+// default chain. Must be called during init() — not safe for concurrent use.
+func SetDisableProtoValidate(disable bool) {
+	disableProtoValidate = disable
+}
+
 // ProtoValidateInterceptor returns a unary server interceptor that validates
 // incoming messages using protovalidate annotations. Returns InvalidArgument
 // on validation failure. Uses GlobalValidator by default; if custom options
@@ -412,7 +419,11 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 		ints = append(ints,
 			ResponseTimeLoggingInterceptor(defaultFilterFunc),
 			TraceIdInterceptor(),
-			ProtoValidateInterceptor(),
+		)
+		if !disableProtoValidate {
+			ints = append(ints, ProtoValidateInterceptor())
+		}
+		ints = append(ints,
 			getServerMetrics().UnaryServerInterceptor(),
 			ServerErrorInterceptor(),
 			NewRelicInterceptor(),
@@ -472,7 +483,11 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 	if useCBServerInterceptors {
 		ints = append(ints,
 			ResponseTimeLoggingStreamInterceptor(),
-			ProtoValidateStreamInterceptor(),
+		)
+		if !disableProtoValidate {
+			ints = append(ints, ProtoValidateStreamInterceptor())
+		}
+		ints = append(ints,
 			getServerMetrics().StreamServerInterceptor(),
 			ServerErrorStreamInterceptor(),
 		)
