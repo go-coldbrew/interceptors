@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"buf.build/go/protovalidate"
 	"github.com/afex/hystrix-go/hystrix"
 	"github.com/go-coldbrew/errors"
 	"github.com/go-coldbrew/errors/notifier"
@@ -25,6 +26,7 @@ import (
 	"github.com/go-coldbrew/options"
 	nrutil "github.com/go-coldbrew/tracing/newrelic"
 	grpcprom "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
+	protovalidate_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/newrelic/go-agent/v3/integrations/nrgrpc"
@@ -58,6 +60,7 @@ var (
 	useCBClientInterceptors                = true
 	responseTimeLogLevel     loggers.Level = loggers.InfoLevel
 	responseTimeLogErrorOnly bool
+	protoValidateOpts        []protovalidate.ValidatorOption
 	srvMetricsOpts           []grpcprom.ServerMetricsOption
 	cltMetricsOpts           []grpcprom.ClientMetricsOption
 	srvMetricsOnce           sync.Once
@@ -233,6 +236,35 @@ func SetClientMetricsOptions(opts ...grpcprom.ClientMetricsOption) {
 	cltMetricsOpts = append(cltMetricsOpts, opts...)
 }
 
+// SetProtoValidateOptions configures custom protovalidate options (e.g.,
+// custom constraints). Must be called during init() — not safe for
+// concurrent use. Follows ColdBrew's init-only config pattern.
+func SetProtoValidateOptions(opts ...protovalidate.ValidatorOption) {
+	protoValidateOpts = append(protoValidateOpts, opts...)
+}
+
+// ProtoValidateInterceptor returns a unary server interceptor that validates
+// incoming messages using protovalidate annotations. Returns InvalidArgument
+// on validation failure. Uses GlobalValidator by default; if custom options
+// are set via SetProtoValidateOptions, creates a new validator with those options.
+func ProtoValidateInterceptor() grpc.UnaryServerInterceptor {
+	if len(protoValidateOpts) > 0 {
+		v, _ := protovalidate.New(protoValidateOpts...)
+		return protovalidate_middleware.UnaryServerInterceptor(v)
+	}
+	return protovalidate_middleware.UnaryServerInterceptor(protovalidate.GlobalValidator)
+}
+
+// ProtoValidateStreamInterceptor returns a stream server interceptor that
+// validates incoming messages using protovalidate annotations.
+func ProtoValidateStreamInterceptor() grpc.StreamServerInterceptor {
+	if len(protoValidateOpts) > 0 {
+		v, _ := protovalidate.New(protoValidateOpts...)
+		return protovalidate_middleware.StreamServerInterceptor(v)
+	}
+	return protovalidate_middleware.StreamServerInterceptor(protovalidate.GlobalValidator)
+}
+
 func registerCollector(c prometheus.Collector) {
 	if err := prometheus.Register(c); err != nil {
 		var are prometheus.AlreadyRegisteredError
@@ -364,6 +396,7 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 		ints = append(ints,
 			ResponseTimeLoggingInterceptor(defaultFilterFunc),
 			TraceIdInterceptor(),
+			ProtoValidateInterceptor(),
 			getServerMetrics().UnaryServerInterceptor(),
 			ServerErrorInterceptor(),
 			NewRelicInterceptor(),
@@ -423,6 +456,7 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 	if useCBServerInterceptors {
 		ints = append(ints,
 			ResponseTimeLoggingStreamInterceptor(),
+			ProtoValidateStreamInterceptor(),
 			getServerMetrics().StreamServerInterceptor(),
 			ServerErrorStreamInterceptor(),
 		)
