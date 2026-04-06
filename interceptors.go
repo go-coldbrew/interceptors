@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"buf.build/go/protovalidate"
 	"github.com/afex/hystrix-go/hystrix"
 	"github.com/go-coldbrew/errors"
 	"github.com/go-coldbrew/errors/notifier"
@@ -25,6 +26,7 @@ import (
 	"github.com/go-coldbrew/options"
 	nrutil "github.com/go-coldbrew/tracing/newrelic"
 	grpcprom "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
+	protovalidate_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/newrelic/go-agent/v3/integrations/nrgrpc"
@@ -58,6 +60,8 @@ var (
 	useCBClientInterceptors                = true
 	responseTimeLogLevel     loggers.Level = loggers.InfoLevel
 	responseTimeLogErrorOnly bool
+	protoValidateOpts        []protovalidate.ValidatorOption
+	disableProtoValidate     bool
 	srvMetricsOpts           []grpcprom.ServerMetricsOption
 	cltMetricsOpts           []grpcprom.ClientMetricsOption
 	srvMetricsOnce           sync.Once
@@ -233,6 +237,57 @@ func SetClientMetricsOptions(opts ...grpcprom.ClientMetricsOption) {
 	cltMetricsOpts = append(cltMetricsOpts, opts...)
 }
 
+// SetProtoValidateOptions configures custom protovalidate options (e.g.,
+// custom constraints). Must be called during init() — not safe for
+// concurrent use. Follows ColdBrew's init-only config pattern.
+func SetProtoValidateOptions(opts ...protovalidate.ValidatorOption) {
+	protoValidateOpts = append(protoValidateOpts, opts...)
+}
+
+// SetDisableProtoValidate disables the protovalidate interceptor in the
+// default chain. Must be called during init() — not safe for concurrent use.
+func SetDisableProtoValidate(disable bool) {
+	disableProtoValidate = disable
+}
+
+// ProtoValidateInterceptor returns a unary server interceptor that validates
+// incoming messages using protovalidate annotations. Returns InvalidArgument
+// on validation failure. Uses GlobalValidator by default; if custom options
+// are set via SetProtoValidateOptions, creates a new validator with those options.
+func ProtoValidateInterceptor() grpc.UnaryServerInterceptor {
+	return protovalidate_middleware.UnaryServerInterceptor(getProtoValidator())
+}
+
+// ProtoValidateStreamInterceptor returns a stream server interceptor that
+// validates incoming messages using protovalidate annotations.
+func ProtoValidateStreamInterceptor() grpc.StreamServerInterceptor {
+	return protovalidate_middleware.StreamServerInterceptor(getProtoValidator())
+}
+
+var (
+	protoValidatorOnce sync.Once
+	protoValidatorVal  protovalidate.Validator
+)
+
+// getProtoValidator returns a cached protovalidate.Validator configured with
+// custom options if set, falling back to GlobalValidator.
+func getProtoValidator() protovalidate.Validator {
+	protoValidatorOnce.Do(func() {
+		if len(protoValidateOpts) > 0 {
+			v, err := protovalidate.New(protoValidateOpts...)
+			if err != nil {
+				log.Error(context.Background(), "msg", "failed to create protovalidate validator with custom options, falling back to global", "err", err)
+				protoValidatorVal = protovalidate.GlobalValidator
+				return
+			}
+			protoValidatorVal = v
+			return
+		}
+		protoValidatorVal = protovalidate.GlobalValidator
+	})
+	return protoValidatorVal
+}
+
 func registerCollector(c prometheus.Collector) {
 	if err := prometheus.Register(c); err != nil {
 		var are prometheus.AlreadyRegisteredError
@@ -364,6 +419,11 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 		ints = append(ints,
 			ResponseTimeLoggingInterceptor(defaultFilterFunc),
 			TraceIdInterceptor(),
+		)
+		if !disableProtoValidate {
+			ints = append(ints, ProtoValidateInterceptor())
+		}
+		ints = append(ints,
 			getServerMetrics().UnaryServerInterceptor(),
 			ServerErrorInterceptor(),
 			NewRelicInterceptor(),
@@ -423,6 +483,11 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 	if useCBServerInterceptors {
 		ints = append(ints,
 			ResponseTimeLoggingStreamInterceptor(),
+		)
+		if !disableProtoValidate {
+			ints = append(ints, ProtoValidateStreamInterceptor())
+		}
+		ints = append(ints,
 			getServerMetrics().StreamServerInterceptor(),
 			ServerErrorStreamInterceptor(),
 		)
