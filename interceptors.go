@@ -248,21 +248,37 @@ func SetProtoValidateOptions(opts ...protovalidate.ValidatorOption) {
 // on validation failure. Uses GlobalValidator by default; if custom options
 // are set via SetProtoValidateOptions, creates a new validator with those options.
 func ProtoValidateInterceptor() grpc.UnaryServerInterceptor {
-	if len(protoValidateOpts) > 0 {
-		v, _ := protovalidate.New(protoValidateOpts...)
-		return protovalidate_middleware.UnaryServerInterceptor(v)
-	}
-	return protovalidate_middleware.UnaryServerInterceptor(protovalidate.GlobalValidator)
+	return protovalidate_middleware.UnaryServerInterceptor(getProtoValidator())
 }
 
 // ProtoValidateStreamInterceptor returns a stream server interceptor that
 // validates incoming messages using protovalidate annotations.
 func ProtoValidateStreamInterceptor() grpc.StreamServerInterceptor {
-	if len(protoValidateOpts) > 0 {
-		v, _ := protovalidate.New(protoValidateOpts...)
-		return protovalidate_middleware.StreamServerInterceptor(v)
-	}
-	return protovalidate_middleware.StreamServerInterceptor(protovalidate.GlobalValidator)
+	return protovalidate_middleware.StreamServerInterceptor(getProtoValidator())
+}
+
+var (
+	protoValidatorOnce sync.Once
+	protoValidatorVal  protovalidate.Validator
+)
+
+// getProtoValidator returns a cached protovalidate.Validator configured with
+// custom options if set, falling back to GlobalValidator.
+func getProtoValidator() protovalidate.Validator {
+	protoValidatorOnce.Do(func() {
+		if len(protoValidateOpts) > 0 {
+			v, err := protovalidate.New(protoValidateOpts...)
+			if err != nil {
+				log.Error(context.Background(), "msg", "failed to create protovalidate validator with custom options, falling back to global", "err", err)
+				protoValidatorVal = protovalidate.GlobalValidator
+				return
+			}
+			protoValidatorVal = v
+			return
+		}
+		protoValidatorVal = protovalidate.GlobalValidator
+	})
+	return protoValidatorVal
 }
 
 func registerCollector(c prometheus.Collector) {
