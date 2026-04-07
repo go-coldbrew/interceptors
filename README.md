@@ -224,7 +224,7 @@ FilterMethodsFunc is the default implementation of Filter function
 func GRPCClientInterceptor(_ ...any) grpc.UnaryClientInterceptor
 ```
 
-Deprecated: GRPCClientInterceptor is no longer needed. gRPC tracing is now handled by otelgrpc.NewClientHandler stats handler configured at the client level. This function is retained for backwards compatibility but returns a no\-op interceptor.
+Deprecated: GRPCClientInterceptor is no longer needed. gRPC tracing is now handled by the native grpc stats/opentelemetry package configured at the client level. This function is retained for backwards compatibility but returns a no\-op interceptor.
 
 <a name="HystrixClientInterceptor"></a>
 ## func [HystrixClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L644>)

@@ -625,7 +625,7 @@ func NewRelicClientInterceptor() grpc.UnaryClientInterceptor {
 }
 
 // Deprecated: GRPCClientInterceptor is no longer needed. gRPC tracing is now handled
-// by otelgrpc.NewClientHandler stats handler configured at the client level.
+// by the native grpc stats/opentelemetry package configured at the client level.
 // This function is retained for backwards compatibility but returns a no-op interceptor.
 func GRPCClientInterceptor(_ ...any) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
