@@ -191,7 +191,7 @@ DefaultStreamInterceptors are the set of default interceptors that should be app
 func DefaultTimeoutInterceptor() grpc.UnaryServerInterceptor
 ```
 
-DefaultTimeoutInterceptor returns a unary server interceptor that applies a default deadline to incoming requests that have no deadline set. If the incoming context already has a deadline \(regardless of duration\), it is left unchanged. When defaultTimeout is 0, the interceptor is a no\-op pass\-through.
+DefaultTimeoutInterceptor returns a unary server interceptor that applies a default deadline to incoming requests that have no deadline set. If the incoming context already has a deadline \(regardless of duration\), it is left unchanged. When defaultTimeout is \<= 0, the interceptor is a no\-op pass\-through.
 
 <a name="DoHTTPtoGRPC"></a>
 ## func [DoHTTPtoGRPC](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L408>)
@@ -365,7 +365,7 @@ SetClientMetricsOptions appends gRPC client metrics options. Must be called duri
 func SetDefaultTimeout(d time.Duration)
 ```
 
-SetDefaultTimeout sets the default timeout applied to incoming unary RPCs that arrive without a deadline. When set to 0, the timeout interceptor is disabled \(pass\-through\). Default is 60s. Must be called during initialization, before the server starts. Not safe for concurrent use.
+SetDefaultTimeout sets the default timeout applied to incoming unary RPCs that arrive without a deadline. When set to \<= 0, the timeout interceptor is disabled \(pass\-through\). Default is 60s. Must be called during initialization, before the server starts. Not safe for concurrent use.
 
 <a name="SetDisableProtoValidate"></a>
 ## func [SetDisableProtoValidate](<https://github.com/go-coldbrew/interceptors/blob/main/interceptors.go#L258>)
