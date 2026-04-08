@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/go-coldbrew/log/loggers"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -42,6 +43,7 @@ func resetGlobals() {
 	useCBClientInterceptors = true
 	responseTimeLogErrorOnly = false
 	responseTimeLogLevel = loggers.InfoLevel
+	defaultTimeout = 60 * time.Second
 	httpToGRPCOnce = sync.Once{}
 	httpToGRPCInterceptor = nil
 }
@@ -1027,5 +1029,111 @@ func TestDoHTTPtoGRPC_InterceptorCaching(t *testing.T) {
 	}
 	if interceptor2Called {
 		t.Error("interceptor added after first DoHTTPtoGRPC call should not be in the cached chain")
+	}
+}
+
+func TestDefaultTimeoutInterceptor_AppliesTimeout(t *testing.T) {
+	defer resetGlobals()
+
+	interceptor := DefaultTimeoutInterceptor()
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
+	ctx := context.Background()
+
+	handler := func(ctx context.Context, req any) (any, error) {
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("expected deadline to be set")
+		}
+		remaining := time.Until(deadline)
+		if remaining < 59*time.Second || remaining > 61*time.Second {
+			t.Fatalf("expected ~60s deadline, got %v", remaining)
+		}
+		return "ok", nil
+	}
+
+	resp, err := interceptor(ctx, nil, info, handler)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp != "ok" {
+		t.Fatalf("expected 'ok', got %v", resp)
+	}
+}
+
+func TestDefaultTimeoutInterceptor_ExistingDeadline(t *testing.T) {
+	defer resetGlobals()
+
+	interceptor := DefaultTimeoutInterceptor()
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	handler := func(ctx context.Context, req any) (any, error) {
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("expected deadline to be set")
+		}
+		remaining := time.Until(deadline)
+		if remaining > 6*time.Second {
+			t.Fatalf("deadline should be ~5s from caller, got %v", remaining)
+		}
+		return "ok", nil
+	}
+
+	_, err := interceptor(ctx, nil, info, handler)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDefaultTimeoutInterceptor_Disabled(t *testing.T) {
+	defer resetGlobals()
+
+	SetDefaultTimeout(0)
+	interceptor := DefaultTimeoutInterceptor()
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
+	ctx := context.Background()
+
+	handler := func(ctx context.Context, req any) (any, error) {
+		if _, ok := ctx.Deadline(); ok {
+			t.Fatal("expected no deadline when timeout is disabled")
+		}
+		return "ok", nil
+	}
+
+	_, err := interceptor(ctx, nil, info, handler)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDefaultInterceptors_IncludesTimeout(t *testing.T) {
+	defer resetGlobals()
+
+	// Call the DefaultTimeoutInterceptor directly from the chain to verify it's wired in.
+	// The first CB interceptor (index 0 when no user interceptors) should be the timeout.
+	ints := DefaultInterceptors()
+	if len(ints) == 0 {
+		t.Fatal("expected at least one interceptor")
+	}
+
+	// The first interceptor should set a deadline on a bare context.
+	ctx := context.Background()
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
+	deadlineSet := false
+
+	handler := func(ctx context.Context, req any) (any, error) {
+		if _, ok := ctx.Deadline(); ok {
+			deadlineSet = true
+		}
+		return "ok", nil
+	}
+
+	_, err := ints[0](ctx, nil, info, handler)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deadlineSet {
+		t.Error("expected first CB interceptor (DefaultTimeoutInterceptor) to set a deadline")
 	}
 }
