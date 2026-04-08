@@ -60,6 +60,7 @@ var (
 	useCBClientInterceptors                = true
 	responseTimeLogLevel     loggers.Level = loggers.InfoLevel
 	responseTimeLogErrorOnly bool
+	defaultTimeout           time.Duration = 60 * time.Second // 0 disables
 	protoValidateOpts        []protovalidate.ValidatorOption
 	disableProtoValidate     bool
 	srvMetricsOpts           []grpcprom.ServerMetricsOption
@@ -81,6 +82,14 @@ func SetResponseTimeLogLevel(ctx context.Context, level loggers.Level) {
 // Must be called during initialization, before the server starts. Not safe for concurrent use.
 func SetResponseTimeLogErrorOnly(errorOnly bool) {
 	responseTimeLogErrorOnly = errorOnly
+}
+
+// SetDefaultTimeout sets the default timeout applied to incoming unary RPCs
+// that arrive without a deadline. When set to 0, the timeout interceptor is
+// disabled (pass-through). Default is 60s.
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
+func SetDefaultTimeout(d time.Duration) {
+	defaultTimeout = d
 }
 
 // If it returns false, the given request will not be traced.
@@ -417,6 +426,7 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 	}
 	if useCBServerInterceptors {
 		ints = append(ints,
+			DefaultTimeoutInterceptor(),
 			ResponseTimeLoggingInterceptor(defaultFilterFunc),
 			TraceIdInterceptor(),
 		)
@@ -512,6 +522,24 @@ func DebugLoggingInterceptor() grpc.UnaryServerInterceptor {
 		resp, err := handler(ctx, req)
 		log.Debug(ctx, "method", info.FullMethod, "response", resp, "err", err)
 		return resp, err
+	}
+}
+
+// DefaultTimeoutInterceptor returns a unary server interceptor that applies a
+// default deadline to incoming requests that have no deadline set. If the
+// incoming context already has a deadline (regardless of duration), it is left
+// unchanged. When defaultTimeout is 0, the interceptor is a no-op pass-through.
+func DefaultTimeoutInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if defaultTimeout <= 0 {
+			return handler(ctx, req)
+		}
+		if _, ok := ctx.Deadline(); ok {
+			return handler(ctx, req)
+		}
+		ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+		defer cancel()
+		return handler(ctx, req)
 	}
 }
 
