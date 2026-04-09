@@ -29,11 +29,11 @@ import (
 	protovalidate_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 	ratelimit_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/ratelimit"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
-	"golang.org/x/time/rate"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/newrelic/go-agent/v3/integrations/nrgrpc"
 	newrelic "github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/prometheus/client_golang/prometheus"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -53,25 +53,25 @@ var (
 	// Use SetFilterMethods instead. Only some direct mutations (replacing the slice
 	// or changing the first element) are detected by internal change detection;
 	// other in-place changes may not invalidate caches correctly.
-	FilterMethods                          = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
-	defaultFilterFunc                      = FilterMethodsFunc
-	unaryServerInterceptors                = []grpc.UnaryServerInterceptor{}
-	streamServerInterceptors               = []grpc.StreamServerInterceptor{}
-	useCBServerInterceptors                = true
-	unaryClientInterceptors                = []grpc.UnaryClientInterceptor{}
-	streamClientInterceptors               = []grpc.StreamClientInterceptor{}
-	useCBClientInterceptors                = true
-	responseTimeLogLevel     loggers.Level = loggers.InfoLevel
-	responseTimeLogErrorOnly bool
-	defaultTimeout           time.Duration = 60 * time.Second // 0 disables
-	protoValidateOpts        []protovalidate.ValidatorOption
-	disableProtoValidate     bool
-	srvMetricsOpts           []grpcprom.ServerMetricsOption
-	cltMetricsOpts           []grpcprom.ClientMetricsOption
-	srvMetricsOnce           sync.Once
-	srvMetrics               *grpcprom.ServerMetrics
-	cltMetricsOnce           sync.Once
-	cltMetrics               *grpcprom.ClientMetrics
+	FilterMethods                            = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
+	defaultFilterFunc                        = FilterMethodsFunc
+	unaryServerInterceptors                  = []grpc.UnaryServerInterceptor{}
+	streamServerInterceptors                 = []grpc.StreamServerInterceptor{}
+	useCBServerInterceptors                  = true
+	unaryClientInterceptors                  = []grpc.UnaryClientInterceptor{}
+	streamClientInterceptors                 = []grpc.StreamClientInterceptor{}
+	useCBClientInterceptors                  = true
+	responseTimeLogLevel       loggers.Level = loggers.InfoLevel
+	responseTimeLogErrorOnly   bool
+	defaultTimeout             time.Duration = 60 * time.Second // 0 disables
+	protoValidateOpts          []protovalidate.ValidatorOption
+	disableProtoValidate       bool
+	srvMetricsOpts             []grpcprom.ServerMetricsOption
+	cltMetricsOpts             []grpcprom.ClientMetricsOption
+	srvMetricsOnce             sync.Once
+	srvMetrics                 *grpcprom.ServerMetrics
+	cltMetricsOnce             sync.Once
+	cltMetrics                 *grpcprom.ClientMetrics
 	disableDebugLogInterceptor bool
 	debugLogHeaderName         = "x-debug-log-level"
 	disableRateLimit           bool
@@ -899,6 +899,9 @@ func SetRateLimiter(limiter ratelimit_middleware.Limiter) {
 // Must be called during initialization.
 func SetDefaultRateLimit(rps float64, burst int) {
 	defaultRateLimit = rate.Limit(rps)
+	if burst < 1 {
+		burst = 1
+	}
 	defaultRateBurst = burst
 }
 

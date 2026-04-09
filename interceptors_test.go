@@ -12,8 +12,8 @@ import (
 
 	"github.com/go-coldbrew/log"
 	"github.com/go-coldbrew/log/loggers"
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	ratelimit_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/ratelimit"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -1435,6 +1435,3 @@ func TestRateLimitInterceptor_Disabled(t *testing.T) {
 		}
 	}
 }
-
-// Verify rate.Inf import is used (compile check)
-var _ = rate.Inf
