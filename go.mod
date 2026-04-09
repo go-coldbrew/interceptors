@@ -15,6 +15,7 @@ require (
 	github.com/newrelic/go-agent/v3 v3.42.0
 	github.com/newrelic/go-agent/v3/integrations/nrgrpc v1.4.7
 	github.com/prometheus/client_golang v1.23.2
+	go.uber.org/goleak v1.3.0
 	google.golang.org/grpc v1.79.3
 )
 

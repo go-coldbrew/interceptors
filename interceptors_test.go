@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-coldbrew/log"
 	"github.com/go-coldbrew/log/loggers"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
@@ -46,6 +47,8 @@ func resetGlobals() {
 	defaultTimeout = 60 * time.Second
 	httpToGRPCOnce = sync.Once{}
 	httpToGRPCInterceptor = nil
+	disableDebugLogInterceptor = false
+	debugLogHeaderName = "x-debug-log-level"
 }
 
 func TestFilterMethodsFunc(t *testing.T) {
@@ -1135,5 +1138,171 @@ func TestDefaultInterceptors_IncludesTimeout(t *testing.T) {
 	}
 	if !deadlineSet {
 		t.Error("expected first CB interceptor (DefaultTimeoutInterceptor) to set a deadline")
+	}
+}
+
+// --- DebugLogInterceptor tests ---
+
+type debugRequest struct{ debug bool }
+
+func (r *debugRequest) GetDebug() bool { return r.debug }
+
+type enableDebugRequest struct{ enable bool }
+
+func (r *enableDebugRequest) GetEnableDebug() bool { return r.enable }
+
+type plainRequest struct{}
+
+func TestDebugLogInterceptor_ProtoFieldDebug(t *testing.T) {
+	resetGlobals()
+	interceptor := DebugLogInterceptor()
+	info := &grpc.UnaryServerInfo{FullMethod: "/test/Debug"}
+
+	var capturedCtx context.Context
+	handler := func(ctx context.Context, req any) (any, error) {
+		capturedCtx = ctx
+		return "ok", nil
+	}
+
+	_, err := interceptor(context.Background(), &debugRequest{debug: true}, info, handler)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	level, found := log.GetOverridenLogLevel(capturedCtx)
+	if !found || level != loggers.DebugLevel {
+		t.Errorf("expected debug level override, found=%v level=%v", found, level)
+	}
+}
+
+func TestDebugLogInterceptor_ProtoFieldEnableDebug(t *testing.T) {
+	resetGlobals()
+	interceptor := DebugLogInterceptor()
+	info := &grpc.UnaryServerInfo{FullMethod: "/test/Debug"}
+
+	var capturedCtx context.Context
+	handler := func(ctx context.Context, req any) (any, error) {
+		capturedCtx = ctx
+		return "ok", nil
+	}
+
+	_, err := interceptor(context.Background(), &enableDebugRequest{enable: true}, info, handler)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	level, found := log.GetOverridenLogLevel(capturedCtx)
+	if !found || level != loggers.DebugLevel {
+		t.Errorf("expected debug level override, found=%v level=%v", found, level)
+	}
+}
+
+func TestDebugLogInterceptor_NoField(t *testing.T) {
+	resetGlobals()
+	interceptor := DebugLogInterceptor()
+	info := &grpc.UnaryServerInfo{FullMethod: "/test/NoDebug"}
+
+	var capturedCtx context.Context
+	handler := func(ctx context.Context, req any) (any, error) {
+		capturedCtx = ctx
+		return "ok", nil
+	}
+
+	_, err := interceptor(context.Background(), &plainRequest{}, info, handler)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_, found := log.GetOverridenLogLevel(capturedCtx)
+	if found {
+		t.Error("expected no log level override for request without debug field")
+	}
+}
+
+func TestDebugLogInterceptor_DebugFalse(t *testing.T) {
+	resetGlobals()
+	interceptor := DebugLogInterceptor()
+	info := &grpc.UnaryServerInfo{FullMethod: "/test/Debug"}
+
+	var capturedCtx context.Context
+	handler := func(ctx context.Context, req any) (any, error) {
+		capturedCtx = ctx
+		return "ok", nil
+	}
+
+	_, err := interceptor(context.Background(), &debugRequest{debug: false}, info, handler)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_, found := log.GetOverridenLogLevel(capturedCtx)
+	if found {
+		t.Error("expected no log level override when debug=false")
+	}
+}
+
+func TestDebugLogInterceptor_Metadata(t *testing.T) {
+	resetGlobals()
+	interceptor := DebugLogInterceptor()
+	info := &grpc.UnaryServerInfo{FullMethod: "/test/MetadataDebug"}
+
+	md := grpcmd.New(map[string]string{"x-debug-log-level": "debug"})
+	ctx := grpcmd.NewIncomingContext(context.Background(), md)
+
+	var capturedCtx context.Context
+	handler := func(ctx context.Context, req any) (any, error) {
+		capturedCtx = ctx
+		return "ok", nil
+	}
+
+	_, err := interceptor(ctx, &plainRequest{}, info, handler)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	level, found := log.GetOverridenLogLevel(capturedCtx)
+	if !found || level != loggers.DebugLevel {
+		t.Errorf("expected debug level from metadata, found=%v level=%v", found, level)
+	}
+}
+
+func TestDebugLogInterceptor_CustomHeaderName(t *testing.T) {
+	resetGlobals()
+	SetDebugLogHeaderName("X-My-Debug")
+	interceptor := DebugLogInterceptor()
+	info := &grpc.UnaryServerInfo{FullMethod: "/test/CustomHeader"}
+
+	md := grpcmd.New(map[string]string{"x-my-debug": "debug"})
+	ctx := grpcmd.NewIncomingContext(context.Background(), md)
+
+	var capturedCtx context.Context
+	handler := func(ctx context.Context, req any) (any, error) {
+		capturedCtx = ctx
+		return "ok", nil
+	}
+
+	_, err := interceptor(ctx, &plainRequest{}, info, handler)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	level, found := log.GetOverridenLogLevel(capturedCtx)
+	if !found || level != loggers.DebugLevel {
+		t.Errorf("expected debug level from custom header, found=%v level=%v", found, level)
+	}
+}
+
+func TestDebugLogInterceptor_Disabled(t *testing.T) {
+	resetGlobals()
+	SetDisableDebugLogInterceptor(true)
+
+	ints := DefaultInterceptors()
+	for _, interceptor := range ints {
+		info := &grpc.UnaryServerInfo{FullMethod: "/test/Disabled"}
+		var capturedCtx context.Context
+		handler := func(ctx context.Context, req any) (any, error) {
+			capturedCtx = ctx
+			return "ok", nil
+		}
+		_, _ = interceptor(context.Background(), &debugRequest{debug: true}, info, handler)
+		if capturedCtx != nil {
+			if _, found := log.GetOverridenLogLevel(capturedCtx); found {
+				t.Error("expected no debug override when interceptor is disabled")
+			}
+		}
 	}
 }
