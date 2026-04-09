@@ -811,11 +811,16 @@ func SetDisableDebugLogInterceptor(disable bool) {
 	disableDebugLogInterceptor = disable
 }
 
-// SetDebugLogHeaderName sets the gRPC metadata header name that triggers debug
-// logging. Default is "x-debug-log-level". The header value should be a valid
-// log level (e.g., "debug"). Must be called during initialization.
+// SetDebugLogHeaderName sets the gRPC metadata header name that triggers
+// per-request log level override. Default is "x-debug-log-level". The header
+// value should be a valid log level (e.g., "debug"). Empty names are ignored.
+// Must be called during initialization.
 func SetDebugLogHeaderName(name string) {
-	debugLogHeaderName = strings.ToLower(name)
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return
+	}
+	debugLogHeaderName = name
 }
 
 // GetDebugLogHeaderName returns the current debug log header name.
@@ -823,10 +828,11 @@ func GetDebugLogHeaderName() string {
 	return debugLogHeaderName
 }
 
-// DebugLogInterceptor enables per-request debug logging based on a proto field
-// or gRPC metadata header. It checks (in order):
-//  1. Proto field: GetDebug() bool or GetEnableDebug() bool
+// DebugLogInterceptor enables per-request log level override based on a proto
+// field or gRPC metadata header. It checks (in order):
+//  1. Proto field: GetDebug() bool or GetEnableDebug() bool — always sets DebugLevel
 //  2. Metadata header: configurable via SetDebugLogHeaderName (default "x-debug-log-level")
+//     — the header value is parsed as a log level, allowing any valid level (debug, info, warn, error)
 //
 // Combined with ColdBrew's trace ID propagation, this allows enabling debug
 // logging for a single request and following it across services via trace ID.
