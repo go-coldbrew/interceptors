@@ -27,7 +27,9 @@ import (
 	nrutil "github.com/go-coldbrew/tracing/newrelic"
 	grpcprom "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
 	protovalidate_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
+	ratelimit_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/ratelimit"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
+	"golang.org/x/time/rate"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/newrelic/go-agent/v3/integrations/nrgrpc"
 	newrelic "github.com/newrelic/go-agent/v3/newrelic"
@@ -72,6 +74,12 @@ var (
 	cltMetrics               *grpcprom.ClientMetrics
 	disableDebugLogInterceptor bool
 	debugLogHeaderName         = "x-debug-log-level"
+	disableRateLimit           bool
+	rateLimiter                ratelimit_middleware.Limiter
+	rateLimiterOnce            sync.Once
+	rateLimiterVal             ratelimit_middleware.Limiter
+	defaultRateLimit           rate.Limit = rate.Inf
+	defaultRateBurst           int
 )
 
 // SetResponseTimeLogLevel sets the log level for response time logging.
@@ -428,8 +436,13 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 		ints = append(ints, unaryServerInterceptors...)
 	}
 	if useCBServerInterceptors {
+		ints = append(ints, DefaultTimeoutInterceptor())
+		if !disableRateLimit {
+			if limiter := getRateLimiter(); limiter != nil {
+				ints = append(ints, ratelimit_middleware.UnaryServerInterceptor(limiter))
+			}
+		}
 		ints = append(ints,
-			DefaultTimeoutInterceptor(),
 			ResponseTimeLoggingInterceptor(defaultFilterFunc),
 			TraceIdInterceptor(),
 		)
@@ -497,6 +510,11 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 		ints = append(ints, streamServerInterceptors...)
 	}
 	if useCBServerInterceptors {
+		if !disableRateLimit {
+			if limiter := getRateLimiter(); limiter != nil {
+				ints = append(ints, ratelimit_middleware.StreamServerInterceptor(limiter))
+			}
+		}
 		ints = append(ints,
 			ResponseTimeLoggingStreamInterceptor(),
 		)
@@ -859,4 +877,57 @@ func DebugLogInterceptor() grpc.UnaryServerInterceptor {
 		}
 		return handler(ctx, req)
 	}
+}
+
+// SetDisableRateLimit disables the rate limiting interceptor in the default
+// interceptor chain. Must be called during initialization.
+func SetDisableRateLimit(disable bool) {
+	disableRateLimit = disable
+}
+
+// SetRateLimiter sets a custom rate limiter implementation. This overrides the
+// built-in token bucket limiter. Must be called during initialization.
+func SetRateLimiter(limiter ratelimit_middleware.Limiter) {
+	rateLimiter = limiter
+}
+
+// SetDefaultRateLimit configures the built-in token bucket rate limiter.
+// rps is requests per second, burst is the maximum burst size.
+// This is a per-pod in-memory limit — with N pods, the effective cluster-wide
+// limit is N × rps. For distributed rate limiting, use SetRateLimiter() with
+// a custom implementation (e.g., Redis-backed).
+// Must be called during initialization.
+func SetDefaultRateLimit(rps float64, burst int) {
+	defaultRateLimit = rate.Limit(rps)
+	defaultRateBurst = burst
+}
+
+// tokenBucketLimiter wraps golang.org/x/time/rate.Limiter to implement
+// the ratelimit.Limiter interface.
+type tokenBucketLimiter struct {
+	limiter *rate.Limiter
+}
+
+func (l *tokenBucketLimiter) Limit(_ context.Context) error {
+	if !l.limiter.Allow() {
+		return fmt.Errorf("rate limit exceeded")
+	}
+	return nil
+}
+
+func getRateLimiter() ratelimit_middleware.Limiter {
+	rateLimiterOnce.Do(func() {
+		if rateLimiter != nil {
+			rateLimiterVal = rateLimiter
+			return
+		}
+		if defaultRateLimit == rate.Inf {
+			rateLimiterVal = nil
+			return
+		}
+		rateLimiterVal = &tokenBucketLimiter{
+			limiter: rate.NewLimiter(defaultRateLimit, defaultRateBurst),
+		}
+	})
+	return rateLimiterVal
 }

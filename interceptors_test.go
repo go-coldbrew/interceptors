@@ -13,8 +13,12 @@ import (
 	"github.com/go-coldbrew/log"
 	"github.com/go-coldbrew/log/loggers"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	ratelimit_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/ratelimit"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	grpcmd "google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 // mockStream implements grpc.ServerTransportStream for testing.
@@ -49,6 +53,12 @@ func resetGlobals() {
 	httpToGRPCInterceptor = nil
 	disableDebugLogInterceptor = false
 	debugLogHeaderName = "x-debug-log-level"
+	disableRateLimit = false
+	rateLimiter = nil
+	rateLimiterOnce = sync.Once{}
+	rateLimiterVal = nil
+	defaultRateLimit = rate.Inf
+	defaultRateBurst = 0
 }
 
 func TestFilterMethodsFunc(t *testing.T) {
@@ -1306,3 +1316,125 @@ func TestDebugLogInterceptor_Disabled(t *testing.T) {
 		}
 	}
 }
+
+// --- RateLimit interceptor tests ---
+
+type alwaysRejectLimiter struct{}
+
+func (l *alwaysRejectLimiter) Limit(_ context.Context) error {
+	return fmt.Errorf("always rejected")
+}
+
+func TestRateLimitInterceptor_DefaultInf(t *testing.T) {
+	resetGlobals()
+	// Default is rate.Inf — no rate limiting, getRateLimiter returns nil
+	limiter := getRateLimiter()
+	if limiter != nil {
+		t.Error("expected nil limiter with default rate.Inf")
+	}
+}
+
+func TestRateLimitInterceptor_Allowed(t *testing.T) {
+	resetGlobals()
+	SetDefaultRateLimit(1000, 100)
+	info := &grpc.UnaryServerInfo{FullMethod: "/test/RateLimit"}
+
+	handler := func(ctx context.Context, req any) (any, error) {
+		return "ok", nil
+	}
+
+	limiter := getRateLimiter()
+	if limiter == nil {
+		t.Fatal("expected non-nil limiter after SetDefaultRateLimit")
+	}
+
+	interceptor := ratelimit_middleware.UnaryServerInterceptor(limiter)
+	resp, err := interceptor(context.Background(), nil, info, handler)
+	if err != nil {
+		t.Fatalf("expected request to pass, got: %v", err)
+	}
+	if resp != "ok" {
+		t.Errorf("expected 'ok', got %v", resp)
+	}
+}
+
+func TestRateLimitInterceptor_Exceeded(t *testing.T) {
+	resetGlobals()
+	SetDefaultRateLimit(1, 1) // 1 rps, burst 1
+	info := &grpc.UnaryServerInfo{FullMethod: "/test/RateLimit"}
+
+	handler := func(ctx context.Context, req any) (any, error) {
+		return "ok", nil
+	}
+
+	limiter := getRateLimiter()
+	interceptor := ratelimit_middleware.UnaryServerInterceptor(limiter)
+
+	// First request should pass
+	_, err := interceptor(context.Background(), nil, info, handler)
+	if err != nil {
+		t.Fatalf("first request should pass, got: %v", err)
+	}
+
+	// Second request should be rate limited
+	_, err = interceptor(context.Background(), nil, info, handler)
+	if err == nil {
+		t.Fatal("second request should be rate limited")
+	}
+	st, ok := status.FromError(err)
+	if !ok || st.Code() != codes.ResourceExhausted {
+		t.Errorf("expected ResourceExhausted, got: %v", err)
+	}
+}
+
+func TestRateLimitInterceptor_CustomLimiter(t *testing.T) {
+	resetGlobals()
+	SetRateLimiter(&alwaysRejectLimiter{})
+	info := &grpc.UnaryServerInfo{FullMethod: "/test/CustomLimit"}
+
+	handler := func(ctx context.Context, req any) (any, error) {
+		return "ok", nil
+	}
+
+	limiter := getRateLimiter()
+	interceptor := ratelimit_middleware.UnaryServerInterceptor(limiter)
+
+	_, err := interceptor(context.Background(), nil, info, handler)
+	if err == nil {
+		t.Fatal("expected rejection from custom limiter")
+	}
+	st, ok := status.FromError(err)
+	if !ok || st.Code() != codes.ResourceExhausted {
+		t.Errorf("expected ResourceExhausted, got: %v", err)
+	}
+}
+
+func TestRateLimitInterceptor_Disabled(t *testing.T) {
+	resetGlobals()
+	SetDefaultRateLimit(1, 1)
+	SetDisableRateLimit(true)
+
+	ints := DefaultInterceptors()
+	// Verify no ratelimit interceptor in chain by running all interceptors
+	// with a handler that should always succeed
+	info := &grpc.UnaryServerInfo{FullMethod: "/test/Disabled"}
+	handler := func(ctx context.Context, req any) (any, error) {
+		return "ok", nil
+	}
+
+	// Fire multiple requests through the chain — none should be rate limited
+	for i := 0; i < 5; i++ {
+		for _, interceptor := range ints {
+			_, err := interceptor(context.Background(), nil, info, handler)
+			if err != nil {
+				st, ok := status.FromError(err)
+				if ok && st.Code() == codes.ResourceExhausted {
+					t.Fatal("rate limiting should be disabled")
+				}
+			}
+		}
+	}
+}
+
+// Verify rate.Inf import is used (compile check)
+var _ = rate.Inf
