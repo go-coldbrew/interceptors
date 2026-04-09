@@ -5,16 +5,17 @@ go 1.25.9
 require (
 	buf.build/go/protovalidate v1.1.3
 	github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5
-	github.com/go-coldbrew/errors v0.2.13
-	github.com/go-coldbrew/log v0.3.1
+	github.com/go-coldbrew/errors v0.2.14
+	github.com/go-coldbrew/log v0.3.2
 	github.com/go-coldbrew/options v0.3.0
-	github.com/go-coldbrew/tracing v0.2.0
+	github.com/go-coldbrew/tracing v0.2.2
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.1.0
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0
 	github.com/newrelic/go-agent/v3 v3.42.0
 	github.com/newrelic/go-agent/v3/integrations/nrgrpc v1.4.7
 	github.com/prometheus/client_golang v1.23.2
+	go.uber.org/goleak v1.3.0
 	google.golang.org/grpc v1.79.3
 )
 

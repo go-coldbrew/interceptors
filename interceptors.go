@@ -33,6 +33,7 @@ import (
 	newrelic "github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -69,6 +70,8 @@ var (
 	srvMetrics               *grpcprom.ServerMetrics
 	cltMetricsOnce           sync.Once
 	cltMetrics               *grpcprom.ClientMetrics
+	disableDebugLogInterceptor bool
+	debugLogHeaderName         = "x-debug-log-level"
 )
 
 // SetResponseTimeLogLevel sets the log level for response time logging.
@@ -430,6 +433,9 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 			ResponseTimeLoggingInterceptor(defaultFilterFunc),
 			TraceIdInterceptor(),
 		)
+		if !disableDebugLogInterceptor {
+			ints = append(ints, DebugLogInterceptor())
+		}
 		if !disableProtoValidate {
 			ints = append(ints, ProtoValidateInterceptor())
 		}
@@ -793,6 +799,62 @@ func TraceIdInterceptor() grpc.UnaryServerInterceptor {
 				ctx = notifier.UpdateTraceId(ctx, r.GetTraceId())
 			} else if r, ok := req.(interface{ GetTraceID() string }); ok {
 				ctx = notifier.UpdateTraceId(ctx, r.GetTraceID())
+			}
+		}
+		return handler(ctx, req)
+	}
+}
+
+// SetDisableDebugLogInterceptor disables the DebugLogInterceptor in the default
+// interceptor chain. Must be called during initialization, before the server starts.
+func SetDisableDebugLogInterceptor(disable bool) {
+	disableDebugLogInterceptor = disable
+}
+
+// SetDebugLogHeaderName sets the gRPC metadata header name that triggers
+// per-request log level override. Default is "x-debug-log-level". The header
+// value should be a valid log level (e.g., "debug"). Empty names are ignored.
+// Must be called during initialization.
+func SetDebugLogHeaderName(name string) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return
+	}
+	debugLogHeaderName = name
+}
+
+// GetDebugLogHeaderName returns the current debug log header name.
+func GetDebugLogHeaderName() string {
+	return debugLogHeaderName
+}
+
+// DebugLogInterceptor enables per-request log level override based on a proto
+// field or gRPC metadata header. It checks (in order):
+//  1. Proto field: GetDebug() bool or GetEnableDebug() bool — always sets DebugLevel
+//  2. Metadata header: configurable via SetDebugLogHeaderName (default "x-debug-log-level")
+//     — the header value is parsed as a log level, allowing any valid level (debug, info, warn, error)
+//
+// Combined with ColdBrew's trace ID propagation, this allows enabling debug
+// logging for a single request and following it across services via trace ID.
+func DebugLogInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+		// Check proto field first
+		if req != nil {
+			if r, ok := req.(interface{ GetDebug() bool }); ok && r.GetDebug() {
+				ctx = log.OverrideLogLevel(ctx, loggers.DebugLevel)
+				return handler(ctx, req)
+			}
+			if r, ok := req.(interface{ GetEnableDebug() bool }); ok && r.GetEnableDebug() {
+				ctx = log.OverrideLogLevel(ctx, loggers.DebugLevel)
+				return handler(ctx, req)
+			}
+		}
+		// Check gRPC metadata header
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			if vals := md.Get(debugLogHeaderName); len(vals) > 0 {
+				if level, err := loggers.ParseLevel(vals[0]); err == nil {
+					ctx = log.OverrideLogLevel(ctx, level)
+				}
 			}
 		}
 		return handler(ctx, req)
