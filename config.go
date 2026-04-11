@@ -49,14 +49,18 @@ type interceptorConfig struct {
 	defaultRateBurst int
 }
 
-var defaultConfig = interceptorConfig{
-	useCBServerInterceptors: true,
-	useCBClientInterceptors: true,
-	responseTimeLogLevel:    loggers.InfoLevel,
-	defaultTimeout:          60 * time.Second,
-	debugLogHeaderName:      "x-debug-log-level",
-	filterFunc:              FilterMethodsFunc,
-	defaultRateLimit:        rate.Inf,
+var defaultConfig = newDefaultConfig()
+
+func newDefaultConfig() interceptorConfig {
+	return interceptorConfig{
+		useCBServerInterceptors: true,
+		useCBClientInterceptors: true,
+		responseTimeLogLevel:    loggers.InfoLevel,
+		defaultTimeout:          60 * time.Second,
+		debugLogHeaderName:      "x-debug-log-level",
+		filterFunc:              FilterMethodsFunc,
+		defaultRateLimit:        rate.Inf,
+	}
 }
 
 // SetResponseTimeLogLevel sets the log level for response time logging.

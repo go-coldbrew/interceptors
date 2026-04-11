@@ -14,7 +14,6 @@ import (
 	"github.com/go-coldbrew/log/loggers"
 	ratelimit_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/ratelimit"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcmd "google.golang.org/grpc/metadata"
@@ -37,20 +36,9 @@ func grpcContext() context.Context {
 
 // resetGlobals restores package-level state so tests don't interfere with each other.
 func resetGlobals() {
-	// Reset config struct to defaults
-	defaultConfig = interceptorConfig{
-		useCBServerInterceptors: true,
-		useCBClientInterceptors: true,
-		responseTimeLogLevel:    loggers.InfoLevel,
-		defaultTimeout:          60 * time.Second,
-		debugLogHeaderName:      "x-debug-log-level",
-		filterFunc:              FilterMethodsFunc,
-		defaultRateLimit:        rate.Inf,
-	}
-	// Reset filter state
+	defaultConfig = newDefaultConfig()
 	FilterMethods = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
 	currentFilter.Store(buildFilterState())
-	// Reset cached singletons
 	httpToGRPCOnce = sync.Once{}
 	httpToGRPCInterceptor = nil
 	rateLimiterOnce = sync.Once{}
