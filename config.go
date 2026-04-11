@@ -137,7 +137,7 @@ func SetServerMetricsOptions(opts ...grpcprom.ServerMetricsOption) {
 }
 
 // SetClientMetricsOptions appends gRPC client metrics options.
-// Must be called during initialization, before the server starts. Not safe for concurrent use.
+// Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
 func SetClientMetricsOptions(opts ...grpcprom.ClientMetricsOption) {
 	defaultConfig.cltMetricsOpts = append(defaultConfig.cltMetricsOpts, opts...)
 }

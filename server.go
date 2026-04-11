@@ -251,7 +251,7 @@ func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor {
 				if e, ok := r.(error); ok {
 					err = e
 				} else {
-					err = errors.New(fmt.Sprintf("panic: %s", r))
+					err = errors.New(fmt.Sprintf("panic: %v", r))
 				}
 				nrutil.FinishNRTransaction(ctx, err)
 				_ = notifier.NotifyWithLevel(err, "critical", info.FullMethod, ctx, stack)
