@@ -114,6 +114,7 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 		ints = append(ints,
 			getServerMetrics().StreamServerInterceptor(),
 			ServerErrorStreamInterceptor(),
+			PanicRecoveryStreamInterceptor(),
 		)
 	}
 	return ints
@@ -223,6 +224,14 @@ func ServerErrorInterceptor() grpc.UnaryServerInterceptor {
 	}
 }
 
+// wrappedStream wraps a grpc.ServerStream to override its context.
+type wrappedStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (w *wrappedStream) Context() context.Context { return w.ctx }
+
 // ServerErrorStreamInterceptor intercepts server errors for stream RPCs and
 // reports them to the error notifier.
 func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
@@ -230,7 +239,7 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor {
 		ctx := stream.Context()
 		ctx, _ = notifier.SetTraceIdWithValue(ctx)
 		start := time.Now()
-		err = handler(srv, stream)
+		err = handler(srv, &wrappedStream{ServerStream: stream, ctx: ctx})
 		if err != nil && defaultConfig.filterFunc(ctx, info.FullMethod) {
 			_ = notifier.NotifyAsync(err, ctx, notifier.Tags{
 				"grpcMethod": info.FullMethod,
@@ -260,6 +269,28 @@ func PanicRecoveryInterceptor() grpc.UnaryServerInterceptor {
 
 		resp, err = handler(ctx, req)
 		return resp, err
+	}
+}
+
+// PanicRecoveryStreamInterceptor recovers from panics in stream handlers,
+// logs the panic and stack trace, and reports it to the error notifier.
+func PanicRecoveryStreamInterceptor() grpc.StreamServerInterceptor {
+	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				ctx := stream.Context()
+				stack := string(debug.Stack())
+				log.Error(ctx, "panic", r, "method", info.FullMethod, "stack", stack)
+				if e, ok := r.(error); ok {
+					err = e
+				} else {
+					err = errors.New(fmt.Sprintf("panic: %v", r))
+				}
+				nrutil.FinishNRTransaction(ctx, err)
+				_ = notifier.NotifyWithLevel(err, "critical", info.FullMethod, ctx, stack)
+			}
+		}()
+		return handler(srv, stream)
 	}
 }
 
