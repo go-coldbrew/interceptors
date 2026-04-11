@@ -37,28 +37,24 @@ func grpcContext() context.Context {
 
 // resetGlobals restores package-level state so tests don't interfere with each other.
 func resetGlobals() {
+	// Reset config struct to defaults
+	defaultConfig = interceptorConfig{
+		useCBServerInterceptors: true,
+		useCBClientInterceptors: true,
+		responseTimeLogLevel:    loggers.InfoLevel,
+		defaultTimeout:          60 * time.Second,
+		debugLogHeaderName:      "x-debug-log-level",
+		filterFunc:              FilterMethodsFunc,
+		defaultRateLimit:        rate.Inf,
+	}
+	// Reset filter state
 	FilterMethods = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
 	currentFilter.Store(buildFilterState())
-	defaultFilterFunc = FilterMethodsFunc
-	unaryServerInterceptors = []grpc.UnaryServerInterceptor{}
-	streamServerInterceptors = []grpc.StreamServerInterceptor{}
-	useCBServerInterceptors = true
-	unaryClientInterceptors = []grpc.UnaryClientInterceptor{}
-	streamClientInterceptors = []grpc.StreamClientInterceptor{}
-	useCBClientInterceptors = true
-	responseTimeLogErrorOnly = false
-	responseTimeLogLevel = loggers.InfoLevel
-	defaultTimeout = 60 * time.Second
+	// Reset cached singletons
 	httpToGRPCOnce = sync.Once{}
 	httpToGRPCInterceptor = nil
-	disableDebugLogInterceptor = false
-	debugLogHeaderName = "x-debug-log-level"
-	disableRateLimit = false
-	rateLimiter = nil
 	rateLimiterOnce = sync.Once{}
 	rateLimiterVal = nil
-	defaultRateLimit = rate.Inf
-	defaultRateBurst = 0
 }
 
 func TestFilterMethodsFunc(t *testing.T) {
@@ -95,18 +91,18 @@ func TestSetFilterFunc(t *testing.T) {
 	}
 	SetFilterFunc(ctx, custom)
 
-	if defaultFilterFunc(ctx, "allow") != true {
+	if defaultConfig.filterFunc(ctx, "allow") != true {
 		t.Error("custom filter should return true for 'allow'")
 	}
-	if defaultFilterFunc(ctx, "deny") != false {
+	if defaultConfig.filterFunc(ctx, "deny") != false {
 		t.Error("custom filter should return false for 'deny'")
 	}
 
 	// Setting nil should not change the filter.
-	prev := defaultFilterFunc
+	prev := defaultConfig.filterFunc
 	SetFilterFunc(ctx, nil)
 	// We can't compare funcs directly, so just verify behaviour is unchanged.
-	if defaultFilterFunc(ctx, "allow") != prev(ctx, "allow") {
+	if defaultConfig.filterFunc(ctx, "allow") != prev(ctx, "allow") {
 		t.Error("SetFilterFunc(nil) should not change the filter")
 	}
 }
@@ -677,12 +673,12 @@ func BenchmarkResponseTimeLogging(b *testing.B) {
 	resetGlobals()
 	// Use debug level — the slog default logger discards debug, so we
 	// measure interceptor + log-args-building overhead without I/O noise.
-	responseTimeLogLevel = loggers.DebugLevel
+	defaultConfig.responseTimeLogLevel = loggers.DebugLevel
 	ctx := grpcContext()
 	ff := FilterMethodsFunc
 
 	b.Run("default/success", func(b *testing.B) {
-		responseTimeLogErrorOnly = false
+		defaultConfig.responseTimeLogErrorOnly = false
 		interceptor := ResponseTimeLoggingInterceptor(ff)
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -692,7 +688,7 @@ func BenchmarkResponseTimeLogging(b *testing.B) {
 	})
 
 	b.Run("default/error", func(b *testing.B) {
-		responseTimeLogErrorOnly = false
+		defaultConfig.responseTimeLogErrorOnly = false
 		interceptor := ResponseTimeLoggingInterceptor(ff)
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -702,7 +698,7 @@ func BenchmarkResponseTimeLogging(b *testing.B) {
 	})
 
 	b.Run("error_only/success", func(b *testing.B) {
-		responseTimeLogErrorOnly = true
+		defaultConfig.responseTimeLogErrorOnly = true
 		interceptor := ResponseTimeLoggingInterceptor(ff)
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -712,7 +708,7 @@ func BenchmarkResponseTimeLogging(b *testing.B) {
 	})
 
 	b.Run("error_only/error", func(b *testing.B) {
-		responseTimeLogErrorOnly = true
+		defaultConfig.responseTimeLogErrorOnly = true
 		interceptor := ResponseTimeLoggingInterceptor(ff)
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -722,7 +718,7 @@ func BenchmarkResponseTimeLogging(b *testing.B) {
 	})
 
 	// Restore default.
-	responseTimeLogErrorOnly = false
+	defaultConfig.responseTimeLogErrorOnly = false
 }
 
 func BenchmarkDefaultInterceptors(b *testing.B) {
