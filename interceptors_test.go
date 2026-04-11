@@ -43,6 +43,12 @@ func resetGlobals() {
 	httpToGRPCInterceptor = nil
 	rateLimiterOnce = sync.Once{}
 	rateLimiterVal = nil
+	srvMetricsOnce = sync.Once{}
+	srvMetrics = nil
+	cltMetricsOnce = sync.Once{}
+	cltMetrics = nil
+	protoValidatorOnce = sync.Once{}
+	protoValidatorVal = nil
 }
 
 func TestFilterMethodsFunc(t *testing.T) {
