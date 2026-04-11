@@ -14,7 +14,6 @@ import (
 	"github.com/go-coldbrew/log/loggers"
 	ratelimit_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/ratelimit"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcmd "google.golang.org/grpc/metadata"
@@ -37,28 +36,19 @@ func grpcContext() context.Context {
 
 // resetGlobals restores package-level state so tests don't interfere with each other.
 func resetGlobals() {
+	defaultConfig = newDefaultConfig()
 	FilterMethods = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
 	currentFilter.Store(buildFilterState())
-	defaultFilterFunc = FilterMethodsFunc
-	unaryServerInterceptors = []grpc.UnaryServerInterceptor{}
-	streamServerInterceptors = []grpc.StreamServerInterceptor{}
-	useCBServerInterceptors = true
-	unaryClientInterceptors = []grpc.UnaryClientInterceptor{}
-	streamClientInterceptors = []grpc.StreamClientInterceptor{}
-	useCBClientInterceptors = true
-	responseTimeLogErrorOnly = false
-	responseTimeLogLevel = loggers.InfoLevel
-	defaultTimeout = 60 * time.Second
 	httpToGRPCOnce = sync.Once{}
 	httpToGRPCInterceptor = nil
-	disableDebugLogInterceptor = false
-	debugLogHeaderName = "x-debug-log-level"
-	disableRateLimit = false
-	rateLimiter = nil
 	rateLimiterOnce = sync.Once{}
 	rateLimiterVal = nil
-	defaultRateLimit = rate.Inf
-	defaultRateBurst = 0
+	srvMetricsOnce = sync.Once{}
+	srvMetrics = nil
+	cltMetricsOnce = sync.Once{}
+	cltMetrics = nil
+	protoValidatorOnce = sync.Once{}
+	protoValidatorVal = nil
 }
 
 func TestFilterMethodsFunc(t *testing.T) {
@@ -95,18 +85,18 @@ func TestSetFilterFunc(t *testing.T) {
 	}
 	SetFilterFunc(ctx, custom)
 
-	if defaultFilterFunc(ctx, "allow") != true {
+	if defaultConfig.filterFunc(ctx, "allow") != true {
 		t.Error("custom filter should return true for 'allow'")
 	}
-	if defaultFilterFunc(ctx, "deny") != false {
+	if defaultConfig.filterFunc(ctx, "deny") != false {
 		t.Error("custom filter should return false for 'deny'")
 	}
 
 	// Setting nil should not change the filter.
-	prev := defaultFilterFunc
+	prev := defaultConfig.filterFunc
 	SetFilterFunc(ctx, nil)
 	// We can't compare funcs directly, so just verify behaviour is unchanged.
-	if defaultFilterFunc(ctx, "allow") != prev(ctx, "allow") {
+	if defaultConfig.filterFunc(ctx, "allow") != prev(ctx, "allow") {
 		t.Error("SetFilterFunc(nil) should not change the filter")
 	}
 }
@@ -677,12 +667,12 @@ func BenchmarkResponseTimeLogging(b *testing.B) {
 	resetGlobals()
 	// Use debug level — the slog default logger discards debug, so we
 	// measure interceptor + log-args-building overhead without I/O noise.
-	responseTimeLogLevel = loggers.DebugLevel
+	defaultConfig.responseTimeLogLevel = loggers.DebugLevel
 	ctx := grpcContext()
 	ff := FilterMethodsFunc
 
 	b.Run("default/success", func(b *testing.B) {
-		responseTimeLogErrorOnly = false
+		defaultConfig.responseTimeLogErrorOnly = false
 		interceptor := ResponseTimeLoggingInterceptor(ff)
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -692,7 +682,7 @@ func BenchmarkResponseTimeLogging(b *testing.B) {
 	})
 
 	b.Run("default/error", func(b *testing.B) {
-		responseTimeLogErrorOnly = false
+		defaultConfig.responseTimeLogErrorOnly = false
 		interceptor := ResponseTimeLoggingInterceptor(ff)
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -702,7 +692,7 @@ func BenchmarkResponseTimeLogging(b *testing.B) {
 	})
 
 	b.Run("error_only/success", func(b *testing.B) {
-		responseTimeLogErrorOnly = true
+		defaultConfig.responseTimeLogErrorOnly = true
 		interceptor := ResponseTimeLoggingInterceptor(ff)
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -712,7 +702,7 @@ func BenchmarkResponseTimeLogging(b *testing.B) {
 	})
 
 	b.Run("error_only/error", func(b *testing.B) {
-		responseTimeLogErrorOnly = true
+		defaultConfig.responseTimeLogErrorOnly = true
 		interceptor := ResponseTimeLoggingInterceptor(ff)
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -722,7 +712,7 @@ func BenchmarkResponseTimeLogging(b *testing.B) {
 	})
 
 	// Restore default.
-	responseTimeLogErrorOnly = false
+	defaultConfig.responseTimeLogErrorOnly = false
 }
 
 func BenchmarkDefaultInterceptors(b *testing.B) {
@@ -1433,5 +1423,113 @@ func TestRateLimitInterceptor_Disabled(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// mockServerStream implements grpc.ServerStream for testing stream interceptors.
+type mockServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (s *mockServerStream) Context() context.Context { return s.ctx }
+
+func TestPanicRecoveryStreamInterceptor_NoPanic(t *testing.T) {
+	interceptor := PanicRecoveryStreamInterceptor()
+	stream := &mockServerStream{ctx: context.Background()}
+	info := &grpc.StreamServerInfo{FullMethod: "/test.Svc/Stream"}
+
+	called := false
+	err := interceptor(nil, stream, info, func(_ any, _ grpc.ServerStream) error {
+		called = true
+		return nil
+	})
+	if !called {
+		t.Fatal("handler should have been called")
+	}
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+}
+
+func TestPanicRecoveryStreamInterceptor_Panic(t *testing.T) {
+	interceptor := PanicRecoveryStreamInterceptor()
+	stream := &mockServerStream{ctx: context.Background()}
+	info := &grpc.StreamServerInfo{FullMethod: "/test.Svc/Stream"}
+
+	err := interceptor(nil, stream, info, func(_ any, _ grpc.ServerStream) error {
+		panic("test panic")
+	})
+	if err == nil {
+		t.Fatal("expected error from panic recovery")
+	}
+	if err.Error() != "panic: test panic" {
+		t.Fatalf("expected 'panic: test panic', got %q", err.Error())
+	}
+}
+
+func TestPanicRecoveryStreamInterceptor_PanicWithError(t *testing.T) {
+	interceptor := PanicRecoveryStreamInterceptor()
+	stream := &mockServerStream{ctx: context.Background()}
+	info := &grpc.StreamServerInfo{FullMethod: "/test.Svc/Stream"}
+	origErr := errors.New("original error")
+
+	err := interceptor(nil, stream, info, func(_ any, _ grpc.ServerStream) error {
+		panic(origErr)
+	})
+	if err != origErr {
+		t.Fatalf("expected original error, got %v", err)
+	}
+}
+
+func TestServerErrorStreamInterceptor_ContextWrapped(t *testing.T) {
+	resetGlobals()
+	interceptor := ServerErrorStreamInterceptor()
+	stream := &mockServerStream{ctx: context.Background()}
+	info := &grpc.StreamServerInfo{FullMethod: "/test.Svc/Stream"}
+
+	var handlerCtx context.Context
+	_ = interceptor(nil, stream, info, func(_ any, s grpc.ServerStream) error {
+		handlerCtx = s.Context()
+		return nil
+	})
+	// The handler should receive a wrapped stream with trace ID set
+	if handlerCtx == nil {
+		t.Fatal("handler context should not be nil")
+	}
+	// Context should differ from original (trace ID was added)
+	if handlerCtx == context.Background() {
+		t.Fatal("handler should receive a wrapped context, not the original")
+	}
+}
+
+func TestServerErrorStreamInterceptor_Error(t *testing.T) {
+	resetGlobals()
+	interceptor := ServerErrorStreamInterceptor()
+	stream := &mockServerStream{ctx: context.Background()}
+	info := &grpc.StreamServerInfo{FullMethod: "/test.Svc/Stream"}
+	testErr := errors.New("stream error")
+
+	err := interceptor(nil, stream, info, func(_ any, _ grpc.ServerStream) error {
+		return testErr
+	})
+	if err != testErr {
+		t.Fatalf("expected test error, got %v", err)
+	}
+}
+
+func TestDefaultStreamInterceptors_IncludesPanicRecovery(t *testing.T) {
+	resetGlobals()
+	ints := DefaultStreamInterceptors()
+	// Verify the chain handles panics by running a panicking handler
+	chain := ints[len(ints)-1] // PanicRecoveryStreamInterceptor is last
+	stream := &mockServerStream{ctx: context.Background()}
+	info := &grpc.StreamServerInfo{FullMethod: "/test.Svc/Stream"}
+
+	err := chain(nil, stream, info, func(_ any, _ grpc.ServerStream) error {
+		panic("chain panic test")
+	})
+	if err == nil {
+		t.Fatal("expected error from panic recovery in default stream chain")
 	}
 }
