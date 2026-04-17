@@ -568,7 +568,7 @@ UseColdBrewServerInterceptors allows enabling/disabling coldbrew server intercep
 <a name="Executor"></a>
 ## type [Executor](<https://github.com/go-coldbrew/interceptors/blob/main/options.go#L15>)
 
-Executor wraps an RPC invocation with resilience logic \(circuit breaking, retries, bulkheading, etc.\). The method parameter is the full gRPC method name \(e.g., "/package.Service/Method"\), enabling per\-method state such as per\-method circuit breakers. The fn parameter performs the actual RPC; the executor must call it exactly once.
+Executor wraps an RPC invocation with resilience logic \(circuit breaking, retries, bulkheading, etc.\). The method parameter is the full gRPC method name \(e.g., "/package.Service/Method"\), enabling per\-method state such as per\-method circuit breakers. The executor is responsible for invoking fn and may call it multiple times when implementing retries.
 
 ```go
 type Executor func(ctx context.Context, method string, fn func(ctx context.Context) error) error
