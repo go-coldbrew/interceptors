@@ -12,9 +12,9 @@ import (
 	"github.com/go-coldbrew/interceptors"
 )
 
-// ExampleSetDefaultExecutor demonstrates setting up a simple global circuit
-// breaker using failsafe-go. This is the most common usage pattern — one
-// circuit breaker shared across all gRPC methods.
+// ExampleSetDefaultExecutor demonstrates setting up a circuit breaker for
+// specific gRPC methods using failsafe-go. The executor receives the method
+// name, so you can filter which methods get circuit breaking.
 func ExampleSetDefaultExecutor() {
 	cb := circuitbreaker.NewBuilder[any]().
 		WithFailureThreshold(5).
@@ -22,14 +22,23 @@ func ExampleSetDefaultExecutor() {
 		WithSuccessThreshold(2).
 		Build()
 
+	// Only apply circuit breaking to specific methods
+	protected := map[string]bool{
+		"/payment.Service/Charge": true,
+		"/payment.Service/Refund": true,
+	}
+
 	interceptors.SetDefaultExecutor(func(ctx context.Context, method string, fn func(ctx context.Context) error) error {
+		if !protected[method] {
+			return fn(ctx) // passthrough for non-protected methods
+		}
 		return failsafe.With[any](cb).WithContext(ctx).Run(func() error {
 			return fn(ctx)
 		})
 	})
 
-	fmt.Println("global circuit breaker configured")
-	// Output: global circuit breaker configured
+	fmt.Println("method-filtered circuit breaker configured")
+	// Output: method-filtered circuit breaker configured
 }
 
 // ExampleSetDefaultExecutor_perMethod demonstrates per-method circuit breakers.
