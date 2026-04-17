@@ -47,6 +47,9 @@ type interceptorConfig struct {
 	rateLimiter      ratelimit_middleware.Limiter
 	defaultRateLimit rate.Limit
 	defaultRateBurst int
+
+	// Executor for resilience (circuit breaking, etc.)
+	defaultExecutor Executor
 }
 
 var defaultConfig = newDefaultConfig()
@@ -202,4 +205,12 @@ func SetDefaultRateLimit(rps float64, burst int) {
 		burst = 1
 	}
 	defaultConfig.defaultRateBurst = burst
+}
+
+// SetDefaultExecutor sets the default [Executor] used by [ExecutorClientInterceptor]
+// for all outbound unary RPCs. When set, ExecutorClientInterceptor replaces
+// [HystrixClientInterceptor] in the default client interceptor chain.
+// Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
+func SetDefaultExecutor(e Executor) {
+	defaultConfig.defaultExecutor = e
 }
