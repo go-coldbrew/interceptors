@@ -142,8 +142,8 @@ func ExecutorClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientI
 		executorErr := exec(ctx, method, func(execCtx context.Context) (err error) {
 			defer func() {
 				if r := recover(); r != nil {
-					err = errors.Wrap(fmt.Errorf("panic in executor method: %s, req: %v, reply: %v", method, req, reply), "Executor")
-					log.Error(execCtx, "panic", r, "method", method, "req", req, "reply", reply)
+					err = errors.Wrap(fmt.Errorf("panic in executor method: %s", method), "Executor")
+					log.Error(execCtx, "panic", r, "method", method)
 				}
 			}()
 			defer notifier.NotifyOnPanic(execCtx, method)
