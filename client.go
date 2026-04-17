@@ -24,17 +24,21 @@ func DefaultClientInterceptors(defaultOpts ...any) []grpc.UnaryClientInterceptor
 		ints = append(ints, defaultConfig.unaryClientInterceptors...)
 	}
 	if defaultConfig.useCBClientInterceptors {
-		hystrixOptions := make([]grpc.CallOption, 0)
+		callOptions := make([]grpc.CallOption, 0)
 		for _, opt := range defaultOpts {
 			if opt == nil {
 				continue
 			}
 			if o, ok := opt.(grpc.CallOption); ok {
-				hystrixOptions = append(hystrixOptions, o)
+				callOptions = append(callOptions, o)
 			}
 		}
+		if defaultConfig.defaultExecutor != nil {
+			ints = append(ints, ExecutorClientInterceptor(callOptions...))
+		} else {
+			ints = append(ints, HystrixClientInterceptor(callOptions...))
+		}
 		ints = append(ints,
-			HystrixClientInterceptor(hystrixOptions...),
 			grpc_retry.UnaryClientInterceptor(),
 			NewRelicClientInterceptor(),
 			getClientMetrics().UnaryClientInterceptor(),
@@ -97,14 +101,76 @@ func GRPCClientInterceptor(_ ...any) grpc.UnaryClientInterceptor {
 	}
 }
 
-// HystrixClientInterceptor returns a unary client interceptor that executes the RPC inside a Hystrix command.
+// ExecutorClientInterceptor returns a unary client interceptor that wraps each
+// RPC in an [Executor]. The executor provides resilience logic such as circuit
+// breaking, retries, or bulkheading.
 //
-// Note: This interceptor wraps github.com/afex/hystrix-go which has been unmaintained since 2018.
-// Consider migrating to github.com/failsafe-go/failsafe-go for circuit breaker functionality.
+// If no executor is configured (neither via [SetDefaultExecutor] nor per-call
+// [WithExecutor]), the RPC is invoked directly as a passthrough.
 //
-// The interceptor applies provided default and per-call client options to configure Hystrix behavior (for example the command name, disabled flag, excluded errors, and excluded gRPC status codes).
-// If Hystrix is disabled via options, the RPC is invoked directly. If the underlying RPC returns an error that matches any configured excluded error or whose gRPC status code matches any configured excluded code, Hystrix fallback is skipped and the RPC error is returned.
-// Panics raised during the RPC invocation are captured and reported to the notifier before being converted into an error. If the RPC itself returns an error, that error is returned; otherwise any error produced by Hystrix is returned.
+// Excluded errors and codes (set via [WithExcludedErrors] / [WithExcludedCodes])
+// are reported as nil to the executor, preventing them from tripping circuit
+// breakers or retry logic. The original error is still returned to the caller.
+func ExecutorClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		o := clientOptions{}
+		for _, opt := range defaultOpts {
+			if opt != nil {
+				if co, ok := opt.(clientOption); ok {
+					co.process(&o)
+				}
+			}
+		}
+		for _, opt := range opts {
+			if opt != nil {
+				if co, ok := opt.(clientOption); ok {
+					co.process(&o)
+				}
+			}
+		}
+
+		// Resolve executor: per-call > global > nil (passthrough)
+		exec := defaultConfig.defaultExecutor
+		if o.hasExecutor {
+			exec = o.executor
+		}
+		if exec == nil {
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}
+
+		var invokerErr error
+		executorErr := exec(ctx, method, func(execCtx context.Context) (err error) {
+			defer func() {
+				if r := recover(); r != nil {
+					err = errors.Wrap(fmt.Errorf("panic in executor method: %s", method), "Executor")
+					log.Error(execCtx, "panic", r, "method", method)
+				}
+			}()
+			defer notifier.NotifyOnPanic(execCtx, method)
+			invokerErr = invoker(execCtx, method, req, reply, cc, opts...)
+			for _, excludedErr := range o.excludedErrors {
+				if stdError.Is(invokerErr, excludedErr) {
+					return nil
+				}
+			}
+			if st, ok := status.FromError(invokerErr); ok {
+				if slices.Contains(o.excludedCodes, st.Code()) {
+					return nil
+				}
+			}
+			return invokerErr
+		})
+		if invokerErr != nil {
+			return invokerErr
+		}
+		return executorErr
+	}
+}
+
+// Deprecated: HystrixClientInterceptor wraps the unmaintained hystrix-go library.
+// Use [SetDefaultExecutor] with a failsafe-go executor instead. Will be removed in v1.
+//
+// See [ExecutorClientInterceptor] for the replacement.
 func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		options := clientOptions{
