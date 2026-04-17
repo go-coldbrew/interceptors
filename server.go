@@ -60,62 +60,138 @@ func ProtoValidateStreamInterceptor() grpc.StreamServerInterceptor {
 	return protovalidate_middleware.StreamServerInterceptor(getProtoValidator())
 }
 
-// DefaultInterceptors are the set of default interceptors that are applied to all coldbrew methods
+// Interceptor ordering contract (read before reordering).
+//
+// The gRPC server chain helper (chainUnaryServer in chain.go) wraps
+// interceptors LAST-FIRST, so the LAST element of the slice returned by
+// DefaultInterceptors / DefaultStreamInterceptors is the INNERMOST (runs
+// closest to the handler) and the FIRST element is the OUTERMOST (runs
+// first on an incoming request).
+//
+// The unaryPos* / streamPos* constants below encode the required layering;
+// changing a position changes observable server semantics:
+//
+//   - Timeout / rate-limit are OUTERMOST. They short-circuit or cap work
+//     before any other interceptor runs.
+//   - Response-time logging, trace-id propagation, and the debug-log override
+//     run next. They set up context fields that downstream interceptors and
+//     the handler rely on.
+//   - Protovalidate runs BEFORE metrics / error reporting / tracing so that
+//     validation failures are visible to them as InvalidArgument errors.
+//   - Metrics, ServerErrorInterceptor, and New Relic wrap the handler from
+//     the OUTSIDE. They observe the final error/response, including errors
+//     synthesized by the panic-recovery layer.
+//   - Panic recovery is INNERMOST. Handler panics are recovered and converted
+//     to errors, which then propagate outward through error reporting,
+//     metrics, and tracing so those layers record the call as a failure
+//     rather than a success.
+//
+// User-supplied interceptors registered via AddUnaryServerInterceptor /
+// AddStreamServerInterceptor are prepended OUTERMOST, before the ColdBrew
+// (CB) set.
+//
+// Tests in interceptors_test.go (TestDefaultInterceptors_Order,
+// TestDefaultInterceptors_PanicRecoveryInnermost,
+// TestDefaultInterceptors_ProtoValidateBeforeHandler,
+// TestDefaultInterceptors_UserInterceptorsOutermost, and their stream
+// variants) guard this contract.
+const (
+	unaryPosTimeout         = iota // outermost of the CB set
+	unaryPosRateLimit              // short-circuit before doing work
+	unaryPosResponseTimeLog        // wraps handler so it can time everything inside
+	unaryPosTraceID                // extracts trace id from request before downstream sees it
+	unaryPosDebugLog               // may override log level for this request
+	unaryPosProtoValidate          // validate before reporting layers observe the call
+	unaryPosMetrics                // observe final outcome from outside
+	unaryPosServerError            // notify on errors — must see recovered panics
+	unaryPosNewRelic               // tracing wrapper — must see recovered panics
+	unaryPosPanicRecovery          // innermost — converts handler panics to errors
+	unaryPosCount
+)
+
+const (
+	streamPosRateLimit       = iota // outermost of the CB stream set
+	streamPosResponseTimeLog        // wrap handler to time everything inside
+	streamPosProtoValidate          // validate before reporting layers observe the call
+	streamPosMetrics                // observe final outcome from outside
+	streamPosServerError            // notify on errors — must see recovered panics
+	streamPosPanicRecovery          // innermost — converts handler panics to errors
+	streamPosCount
+)
+
+// DefaultInterceptors returns the default unary server interceptor chain.
+// The ordering is defined by the unaryPos* constants above; this function
+// assigns each interceptor to its named slot and drops any slot that is
+// disabled via configuration. See the ordering contract above for semantics.
 func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 	ints := []grpc.UnaryServerInterceptor{}
 	if len(defaultConfig.unaryServerInterceptors) > 0 {
 		ints = append(ints, defaultConfig.unaryServerInterceptors...)
 	}
-	if defaultConfig.useCBServerInterceptors {
-		ints = append(ints, DefaultTimeoutInterceptor())
-		if !defaultConfig.disableRateLimit {
-			if limiter := getRateLimiter(); limiter != nil {
-				ints = append(ints, ratelimit_middleware.UnaryServerInterceptor(limiter))
-			}
+	if !defaultConfig.useCBServerInterceptors {
+		return ints
+	}
+
+	cb := make([]grpc.UnaryServerInterceptor, unaryPosCount)
+	cb[unaryPosTimeout] = DefaultTimeoutInterceptor()
+	if !defaultConfig.disableRateLimit {
+		if limiter := getRateLimiter(); limiter != nil {
+			cb[unaryPosRateLimit] = ratelimit_middleware.UnaryServerInterceptor(limiter)
 		}
-		ints = append(ints,
-			ResponseTimeLoggingInterceptor(defaultConfig.filterFunc),
-			TraceIdInterceptor(),
-		)
-		if !defaultConfig.disableDebugLogInterceptor {
-			ints = append(ints, DebugLogInterceptor())
+	}
+	cb[unaryPosResponseTimeLog] = ResponseTimeLoggingInterceptor(defaultConfig.filterFunc)
+	cb[unaryPosTraceID] = TraceIdInterceptor()
+	if !defaultConfig.disableDebugLogInterceptor {
+		cb[unaryPosDebugLog] = DebugLogInterceptor()
+	}
+	if !defaultConfig.disableProtoValidate {
+		cb[unaryPosProtoValidate] = ProtoValidateInterceptor()
+	}
+	cb[unaryPosMetrics] = getServerMetrics().UnaryServerInterceptor()
+	cb[unaryPosServerError] = ServerErrorInterceptor()
+	cb[unaryPosNewRelic] = NewRelicInterceptor()
+	cb[unaryPosPanicRecovery] = PanicRecoveryInterceptor()
+
+	for _, i := range cb {
+		if i != nil {
+			ints = append(ints, i)
 		}
-		if !defaultConfig.disableProtoValidate {
-			ints = append(ints, ProtoValidateInterceptor())
-		}
-		ints = append(ints,
-			getServerMetrics().UnaryServerInterceptor(),
-			ServerErrorInterceptor(),
-			NewRelicInterceptor(),
-			PanicRecoveryInterceptor(),
-		)
 	}
 	return ints
 }
 
-// DefaultStreamInterceptors are the set of default interceptors that should be applied to all coldbrew streams
+// DefaultStreamInterceptors returns the default stream server interceptor
+// chain. The ordering is defined by the streamPos* constants above; this
+// function assigns each interceptor to its named slot and drops any slot
+// that is disabled via configuration. See the ordering contract above for
+// semantics.
 func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 	ints := []grpc.StreamServerInterceptor{}
 	if len(defaultConfig.streamServerInterceptors) > 0 {
 		ints = append(ints, defaultConfig.streamServerInterceptors...)
 	}
-	if defaultConfig.useCBServerInterceptors {
-		if !defaultConfig.disableRateLimit {
-			if limiter := getRateLimiter(); limiter != nil {
-				ints = append(ints, ratelimit_middleware.StreamServerInterceptor(limiter))
-			}
+	if !defaultConfig.useCBServerInterceptors {
+		return ints
+	}
+
+	cb := make([]grpc.StreamServerInterceptor, streamPosCount)
+	if !defaultConfig.disableRateLimit {
+		if limiter := getRateLimiter(); limiter != nil {
+			cb[streamPosRateLimit] = ratelimit_middleware.StreamServerInterceptor(limiter)
 		}
-		ints = append(ints,
-			ResponseTimeLoggingStreamInterceptor(),
-		)
-		if !defaultConfig.disableProtoValidate {
-			ints = append(ints, ProtoValidateStreamInterceptor())
+	}
+	cb[streamPosResponseTimeLog] = ResponseTimeLoggingStreamInterceptor()
+	if !defaultConfig.disableProtoValidate {
+		cb[streamPosProtoValidate] = ProtoValidateStreamInterceptor()
+	}
+	cb[streamPosMetrics] = getServerMetrics().StreamServerInterceptor()
+	cb[streamPosServerError] = ServerErrorStreamInterceptor()
+	cb[streamPosPanicRecovery] = PanicRecoveryStreamInterceptor()
+
+	for _, i := range cb {
+		if i != nil {
+			ints = append(ints, i)
 		}
-		ints = append(ints,
-			getServerMetrics().StreamServerInterceptor(),
-			ServerErrorStreamInterceptor(),
-			PanicRecoveryStreamInterceptor(),
-		)
 	}
 	return ints
 }
