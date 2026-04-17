@@ -41,27 +41,41 @@ func ExampleSetDefaultExecutor() {
 	// Output: method-filtered circuit breaker configured
 }
 
-// ExampleSetDefaultExecutor_perMethod demonstrates per-method circuit breakers.
-// Each gRPC method gets its own circuit breaker, so failures in one method
-// don't trip the breaker for another.
+// ExampleSetDefaultExecutor_perMethod demonstrates per-method circuit breakers
+// with different limits. Each method gets its own circuit breaker with
+// tuning appropriate for that method's characteristics.
 func ExampleSetDefaultExecutor_perMethod() {
+	type cbConfig struct {
+		failureThreshold uint
+		delay            time.Duration
+	}
+
+	// Different limits per method
+	configs := map[string]cbConfig{
+		"/payment.Service/Charge": {failureThreshold: 3, delay: 10 * time.Second}, // sensitive — trip fast, recover slow
+		"/payment.Service/Refund": {failureThreshold: 3, delay: 10 * time.Second},
+		"/user.Service/GetUser":   {failureThreshold: 10, delay: 5 * time.Second}, // tolerant — allow more failures
+		"/feed.Service/GetFeed":   {failureThreshold: 10, delay: 5 * time.Second},
+	}
+
 	var (
 		mu       sync.Mutex
 		breakers = make(map[string]circuitbreaker.CircuitBreaker[any])
 	)
 
-	newBreaker := func() circuitbreaker.CircuitBreaker[any] {
-		return circuitbreaker.NewBuilder[any]().
-			WithFailureThreshold(5).
-			WithDelay(5 * time.Second).
-			Build()
-	}
-
 	interceptors.SetDefaultExecutor(func(ctx context.Context, method string, fn func(ctx context.Context) error) error {
-		mu.Lock()
-		cb, ok := breakers[method]
+		cfg, ok := configs[method]
 		if !ok {
-			cb = newBreaker()
+			return fn(ctx) // no circuit breaker for unconfigured methods
+		}
+
+		mu.Lock()
+		cb, exists := breakers[method]
+		if !exists {
+			cb = circuitbreaker.NewBuilder[any]().
+				WithFailureThreshold(cfg.failureThreshold).
+				WithDelay(cfg.delay).
+				Build()
 			breakers[method] = cb
 		}
 		mu.Unlock()
