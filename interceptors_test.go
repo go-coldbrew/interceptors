@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -573,8 +574,8 @@ func TestExecutorClientInterceptor(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error from panic recovery")
 		}
-		if !errors.Is(err, err) {
-			t.Fatalf("expected wrapped panic error, got: %v", err)
+		if !strings.Contains(err.Error(), "panic in executor method") {
+			t.Fatalf("expected wrapped panic error containing 'panic in executor method', got: %v", err)
 		}
 	})
 
