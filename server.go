@@ -90,32 +90,31 @@ func ProtoValidateStreamInterceptor() grpc.StreamServerInterceptor {
 // AddStreamServerInterceptor are prepended OUTERMOST, before the ColdBrew
 // (CB) set.
 //
-// Tests in interceptors_test.go (TestDefaultInterceptors_Order,
-// TestDefaultInterceptors_PanicRecoveryInnermost,
-// TestDefaultInterceptors_ProtoValidateBeforeHandler,
+// Tests in interceptors_test.go (TestInterceptorPositionConstants,
+// TestDefaultInterceptors_SlotWiring, TestDefaultInterceptors_PanicThroughFullChain,
 // TestDefaultInterceptors_UserInterceptorsOutermost, and their stream
 // variants) guard this contract.
 const (
-	unaryPosTimeout         = iota // outermost of the CB set
-	unaryPosRateLimit              // short-circuit before doing work
-	unaryPosResponseTimeLog        // wraps handler so it can time everything inside
-	unaryPosTraceID                // extracts trace id from request before downstream sees it
-	unaryPosDebugLog               // may override log level for this request
-	unaryPosProtoValidate          // validate before reporting layers observe the call
-	unaryPosMetrics                // observe final outcome from outside
-	unaryPosServerError            // notify on errors — must see recovered panics
-	unaryPosNewRelic               // tracing wrapper — must see recovered panics
-	unaryPosPanicRecovery          // innermost — converts handler panics to errors
+	unaryPosTimeout = iota // outermost
+	unaryPosRateLimit
+	unaryPosResponseTimeLog
+	unaryPosTraceID
+	unaryPosDebugLog
+	unaryPosProtoValidate
+	unaryPosMetrics
+	unaryPosServerError
+	unaryPosNewRelic
+	unaryPosPanicRecovery // innermost
 	unaryPosCount
 )
 
 const (
-	streamPosRateLimit       = iota // outermost of the CB stream set
-	streamPosResponseTimeLog        // wrap handler to time everything inside
-	streamPosProtoValidate          // validate before reporting layers observe the call
-	streamPosMetrics                // observe final outcome from outside
-	streamPosServerError            // notify on errors — must see recovered panics
-	streamPosPanicRecovery          // innermost — converts handler panics to errors
+	streamPosRateLimit = iota // outermost
+	streamPosResponseTimeLog
+	streamPosProtoValidate
+	streamPosMetrics
+	streamPosServerError
+	streamPosPanicRecovery // innermost
 	streamPosCount
 )
 
@@ -124,10 +123,8 @@ const (
 // assigns each interceptor to its named slot and drops any slot that is
 // disabled via configuration. See the ordering contract above for semantics.
 func DefaultInterceptors() []grpc.UnaryServerInterceptor {
-	ints := []grpc.UnaryServerInterceptor{}
-	if len(defaultConfig.unaryServerInterceptors) > 0 {
-		ints = append(ints, defaultConfig.unaryServerInterceptors...)
-	}
+	ints := make([]grpc.UnaryServerInterceptor, 0, len(defaultConfig.unaryServerInterceptors)+unaryPosCount)
+	ints = append(ints, defaultConfig.unaryServerInterceptors...)
 	if !defaultConfig.useCBServerInterceptors {
 		return ints
 	}
@@ -166,10 +163,8 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 // that is disabled via configuration. See the ordering contract above for
 // semantics.
 func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
-	ints := []grpc.StreamServerInterceptor{}
-	if len(defaultConfig.streamServerInterceptors) > 0 {
-		ints = append(ints, defaultConfig.streamServerInterceptors...)
-	}
+	ints := make([]grpc.StreamServerInterceptor, 0, len(defaultConfig.streamServerInterceptors)+streamPosCount)
+	ints = append(ints, defaultConfig.streamServerInterceptors...)
 	if !defaultConfig.useCBServerInterceptors {
 		return ints
 	}

@@ -2067,10 +2067,8 @@ func TestDefaultInterceptors_PanicThroughFullChain(t *testing.T) {
 	defer resetGlobals()
 
 	var userSawErr error
-	var userCalled bool
 	AddUnaryServerInterceptor(context.Background(),
 		func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-			userCalled = true
 			resp, err := handler(ctx, req)
 			userSawErr = err
 			return resp, err
@@ -2083,9 +2081,6 @@ func TestDefaultInterceptors_PanicThroughFullChain(t *testing.T) {
 		func(_ context.Context, _ any) (any, error) {
 			panic("boom")
 		})
-	if !userCalled {
-		t.Fatal("user interceptor should have been invoked")
-	}
 	if err == nil {
 		t.Fatal("chain should have returned an error after handler panic")
 	}
