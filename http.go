@@ -70,7 +70,7 @@ func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
 	if pattern != "" {
 		wrappedPattern, wrappedHandler := newrelic.WrapHandleFunc(app, pattern, h)
 		return wrappedPattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if defaultConfig.filterFunc(context.Background(), r.URL.Path) {
+			if defaultConfig.filterFunc(r.Context(), r.URL.Path) {
 				wrappedHandler(w, r)
 				return
 			}
@@ -79,7 +79,7 @@ func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
 	}
 	return pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// filter functions we do not need
-		if defaultConfig.filterFunc(context.Background(), r.URL.Path) {
+		if defaultConfig.filterFunc(r.Context(), r.URL.Path) {
 			txn := app.StartTransaction(r.Method + " " + r.URL.Path)
 			defer txn.End()
 			w = txn.SetWebResponse(w)

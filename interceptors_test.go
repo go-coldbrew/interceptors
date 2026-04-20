@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2231,7 +2232,7 @@ func TestNRHttpTracer_NilApp(t *testing.T) {
 		t.Errorf("pattern should be unchanged when NR app is nil; got %q", p)
 	}
 	// With no NR app, the function must return the original handler reference.
-	if fmt.Sprintf("%p", got) != fmt.Sprintf("%p", h) {
+	if reflect.ValueOf(got).Pointer() != reflect.ValueOf(h).Pointer() {
 		t.Error("expected original handler to be returned unchanged when NR app is nil")
 	}
 }
