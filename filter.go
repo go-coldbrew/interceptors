@@ -36,8 +36,9 @@ func init() {
 }
 
 // hashFilterMethods returns an FNV-1a 64-bit hash of the slice contents.
-// Inline so it allocates nothing — it runs on every FilterMethodsFunc call
-// to detect direct mutations of the deprecated FilterMethods variable.
+// Written to avoid allocations (no []byte conversions or fmt calls) because
+// it runs on every FilterMethodsFunc call to detect direct mutations of
+// the deprecated FilterMethods variable.
 func hashFilterMethods(s []string) uint64 {
 	const (
 		offset64 uint64 = 14695981039346656037
@@ -45,7 +46,8 @@ func hashFilterMethods(s []string) uint64 {
 	)
 	h := offset64
 	for _, v := range s {
-		// hash the length first so ["ab","c"] and ["a","bc"] cannot collide
+		// Mix the length first so ["ab","c"] and ["a","bc"] produce
+		// different input byte streams for the hash.
 		h ^= uint64(len(v))
 		h *= prime64
 		for i := 0; i < len(v); i++ {
