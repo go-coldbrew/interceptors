@@ -90,9 +90,8 @@ const SupportPackageIsVersion1 = true
 var (
     // Deprecated: FilterMethods is the list of methods that are filtered by default.
     // Use SetFilterMethods instead. Any direct mutation (replacing the slice
-    // or editing it in place) is detected via a content hash, but
-    // SetFilterMethods is the supported API and avoids the per-call hash check
-    // cost.
+    // or editing it in place) is detected via a content hash.
+    // SetFilterMethods is the supported API for updating the filter list.
     FilterMethods = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
 )
 ```
@@ -259,7 +258,7 @@ If no executor is configured \(neither via [SetDefaultExecutor](<#SetDefaultExec
 Excluded errors and codes \(set via \[WithExcludedErrors\] / \[WithExcludedCodes\]\) are reported as nil to the executor, preventing them from tripping circuit breakers or retry logic. The original error is still returned to the caller.
 
 <a name="FilterMethodsFunc"></a>
-## func [FilterMethodsFunc](<https://github.com/go-coldbrew/interceptors/blob/main/filter.go#L100>)
+## func [FilterMethodsFunc](<https://github.com/go-coldbrew/interceptors/blob/main/filter.go#L99>)
 
 ```go
 func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool
@@ -486,7 +485,7 @@ func SetFilterFunc(ctx context.Context, ff FilterFunc)
 SetFilterFunc sets the default filter function to be used by interceptors. Must be called during initialization, before the server starts. Not safe for concurrent use.
 
 <a name="SetFilterMethods"></a>
-## func [SetFilterMethods](<https://github.com/go-coldbrew/interceptors/blob/main/filter.go#L80>)
+## func [SetFilterMethods](<https://github.com/go-coldbrew/interceptors/blob/main/filter.go#L79>)
 
 ```go
 func SetFilterMethods(ctx context.Context, methods []string)

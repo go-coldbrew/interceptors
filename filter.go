@@ -15,9 +15,8 @@ type FilterFunc func(ctx context.Context, fullMethodName string) bool
 var (
 	// Deprecated: FilterMethods is the list of methods that are filtered by default.
 	// Use SetFilterMethods instead. Any direct mutation (replacing the slice
-	// or editing it in place) is detected via a content hash, but
-	// SetFilterMethods is the supported API and avoids the per-call hash check
-	// cost.
+	// or editing it in place) is detected via a content hash.
+	// SetFilterMethods is the supported API for updating the filter list.
 	FilterMethods = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
 )
 
@@ -46,13 +45,13 @@ func hashFilterMethods(s []string) uint64 {
 	)
 	h := offset64
 	for _, v := range s {
+		// hash the length first so ["ab","c"] and ["a","bc"] cannot collide
+		h ^= uint64(len(v))
+		h *= prime64
 		for i := 0; i < len(v); i++ {
 			h ^= uint64(v[i])
 			h *= prime64
 		}
-		// separator byte so ["ab","c"] and ["a","bc"] hash differently
-		h ^= 0
-		h *= prime64
 	}
 	return h
 }
