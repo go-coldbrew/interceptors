@@ -1882,13 +1882,14 @@ func TestInterceptorPositionConstants(t *testing.T) {
 	if unaryPosPanicRecovery <= unaryPosNewRelic {
 		t.Error("panic recovery must be INNER to NewRelic")
 	}
-	// Protovalidate must be INNER to metrics/error-reporting so validation
-	// errors are visible to them.
+	// Protovalidate sits OUTER to metrics / error-reporting so that
+	// obviously-invalid requests short-circuit with InvalidArgument before
+	// any metrics or error-reporting work runs.
 	if unaryPosProtoValidate >= unaryPosMetrics {
-		t.Error("protovalidate must be OUTER to metrics (so InvalidArgument is recorded)")
+		t.Error("protovalidate must be OUTER to metrics (short-circuits before metrics work runs)")
 	}
 	if unaryPosProtoValidate >= unaryPosServerError {
-		t.Error("protovalidate must be OUTER to ServerErrorInterceptor")
+		t.Error("protovalidate must be OUTER to ServerErrorInterceptor (short-circuits before error-reporting runs)")
 	}
 
 	// Stream variants.
@@ -1921,7 +1922,7 @@ func TestInterceptorPositionConstants(t *testing.T) {
 		t.Error("stream panic recovery must be INNER to ServerErrorStreamInterceptor")
 	}
 	if streamPosProtoValidate >= streamPosMetrics {
-		t.Error("stream protovalidate must be OUTER to metrics")
+		t.Error("stream protovalidate must be OUTER to metrics (short-circuits before metrics work runs)")
 	}
 }
 
@@ -2040,7 +2041,7 @@ func TestDefaultInterceptors_SlotWiring(t *testing.T) {
 		}
 	})
 
-	t.Run("ServerError_PassThroughNoError", func(t *testing.T) {
+	t.Run("ServerError_PanicPropagates", func(t *testing.T) {
 		// ServerErrorInterceptor must NOT recover panics — if it did, a
 		// misplaced recovery would silently swallow errors and break the
 		// contract that only unaryPosPanicRecovery recovers.
@@ -2066,6 +2067,12 @@ func TestDefaultInterceptors_PanicThroughFullChain(t *testing.T) {
 	resetGlobals()
 	defer resetGlobals()
 
+	// protovalidate sits outer to panic recovery and rejects nil requests
+	// with InvalidArgument; without disabling it, the handler never runs
+	// and the test would pass on the validation error instead of the
+	// recovered panic.
+	SetDisableProtoValidate(true)
+
 	var userSawErr error
 	AddUnaryServerInterceptor(context.Background(),
 		func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
@@ -2081,14 +2088,14 @@ func TestDefaultInterceptors_PanicThroughFullChain(t *testing.T) {
 		func(_ context.Context, _ any) (any, error) {
 			panic("boom")
 		})
-	if err == nil {
-		t.Fatal("chain should have returned an error after handler panic")
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("chain should surface the recovered panic (want error containing 'boom'); got %v", err)
 	}
 	if resp != nil {
 		t.Errorf("chain should return nil resp on panic, got %v", resp)
 	}
-	if userSawErr == nil {
-		t.Error("user interceptor (outermost) should observe the recovered error")
+	if userSawErr == nil || !strings.Contains(userSawErr.Error(), "boom") {
+		t.Errorf("user interceptor (outermost) should observe the recovered panic error; got %v", userSawErr)
 	}
 }
 
@@ -2146,7 +2153,7 @@ func TestDefaultStreamInterceptors_SlotWiring(t *testing.T) {
 		}
 	})
 
-	t.Run("ServerError_NoRecover", func(t *testing.T) {
+	t.Run("ServerError_PanicPropagates", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r == nil {
 				t.Errorf("slot streamPosServerError (%d) must NOT recover panics", streamPosServerError)

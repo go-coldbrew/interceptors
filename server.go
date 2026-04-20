@@ -76,11 +76,16 @@ func ProtoValidateStreamInterceptor() grpc.StreamServerInterceptor {
 //   - Response-time logging, trace-id propagation, and the debug-log override
 //     run next. They set up context fields that downstream interceptors and
 //     the handler rely on.
-//   - Protovalidate runs BEFORE metrics / error reporting / tracing so that
-//     validation failures are visible to them as InvalidArgument errors.
+//   - Protovalidate runs BEFORE (outer to) metrics / error reporting /
+//     tracing. A validation failure short-circuits the chain with
+//     InvalidArgument so no metrics or error-reporting work is done for
+//     obviously bad requests; the trade-off is that inner layers do not
+//     observe validation rejections.
 //   - Metrics, ServerErrorInterceptor, and New Relic wrap the handler from
-//     the OUTSIDE. They observe the final error/response, including errors
-//     synthesized by the panic-recovery layer.
+//     the OUTSIDE of the inner stack. They observe the final error/response
+//     that propagates back outward — including errors synthesized by the
+//     panic-recovery layer — but not validation rejections short-circuited
+//     by the outer protovalidate layer.
 //   - Panic recovery is INNERMOST. Handler panics are recovered and converted
 //     to errors, which then propagate outward through error reporting,
 //     metrics, and tracing so those layers record the call as a failure
