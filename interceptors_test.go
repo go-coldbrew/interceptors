@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,8 +16,10 @@ import (
 	"github.com/go-coldbrew/errors/notifier"
 	"github.com/go-coldbrew/log"
 	"github.com/go-coldbrew/log/loggers"
+	nrutil "github.com/go-coldbrew/tracing/newrelic"
 	ratelimit_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/ratelimit"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	newrelic "github.com/newrelic/go-agent/v3/newrelic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcmd "google.golang.org/grpc/metadata"
@@ -2195,5 +2199,108 @@ func TestDefaultStreamInterceptors_UserInterceptorsOutermost(t *testing.T) {
 	})
 	if len(order) == 0 || order[0] != "user" {
 		t.Errorf("user stream interceptor should be outermost (first); order=%v", order)
+	}
+}
+
+// --- NRHttpTracer tests ---
+
+// newTestNRApp builds a disabled New Relic application suitable for tests —
+// no network calls, but Application / Transaction objects behave normally
+// including request-context propagation.
+func newTestNRApp(t *testing.T) *newrelic.Application {
+	t.Helper()
+	app, err := newrelic.NewApplication(
+		newrelic.ConfigAppName("test"),
+		newrelic.ConfigLicense(strings.Repeat("x", 40)),
+		newrelic.ConfigEnabled(false),
+	)
+	if err != nil {
+		t.Fatalf("newrelic.NewApplication: %v", err)
+	}
+	return app
+}
+
+func TestNRHttpTracer_NilApp(t *testing.T) {
+	resetGlobals()
+	defer resetGlobals()
+
+	nrutil.SetNewRelicApp(nil)
+	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) })
+
+	p, got := NRHttpTracer("/route", h)
+	if p != "/route" {
+		t.Errorf("pattern should be unchanged when NR app is nil; got %q", p)
+	}
+	// With no NR app, the function must return the original handler reference.
+	if reflect.ValueOf(got).Pointer() != reflect.ValueOf(h).Pointer() {
+		t.Error("expected original handler to be returned unchanged when NR app is nil")
+	}
+}
+
+// TestNRHttpTracer_FilterFuncAppliedForNonEmptyPattern guards issue #42:
+// when the pattern is non-empty, the configured filterFunc must still gate
+// NR instrumentation so filtered routes run the original handler without
+// starting a transaction.
+func TestNRHttpTracer_FilterFuncAppliedForNonEmptyPattern(t *testing.T) {
+	resetGlobals()
+	defer resetGlobals()
+
+	nrutil.SetNewRelicApp(newTestNRApp(t))
+	defer nrutil.SetNewRelicApp(nil)
+
+	SetFilterFunc(context.Background(), func(_ context.Context, path string) bool {
+		return path != "/skip"
+	})
+
+	var sawTxn bool
+	h := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		sawTxn = newrelic.FromContext(r.Context()) != nil
+	})
+
+	_, wrapped := NRHttpTracer("/route", h)
+
+	sawTxn = false
+	wrapped.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/skip", nil))
+	if sawTxn {
+		t.Error("filtered path should run without a New Relic transaction in request context")
+	}
+
+	sawTxn = false
+	wrapped.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/keep", nil))
+	if !sawTxn {
+		t.Error("non-filtered path should run with a New Relic transaction in request context")
+	}
+}
+
+// TestNRHttpTracer_FilterFuncAppliedForEmptyPattern exercises the other
+// branch so a future regression in either path is caught.
+func TestNRHttpTracer_FilterFuncAppliedForEmptyPattern(t *testing.T) {
+	resetGlobals()
+	defer resetGlobals()
+
+	nrutil.SetNewRelicApp(newTestNRApp(t))
+	defer nrutil.SetNewRelicApp(nil)
+
+	SetFilterFunc(context.Background(), func(_ context.Context, path string) bool {
+		return path != "/skip"
+	})
+
+	var sawTxn bool
+	h := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		sawTxn = newrelic.FromContext(r.Context()) != nil
+	})
+
+	_, wrapped := NRHttpTracer("", h)
+
+	sawTxn = false
+	wrapped.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/skip", nil))
+	if sawTxn {
+		t.Error("filtered path should run without a New Relic transaction in request context")
+	}
+
+	sawTxn = false
+	wrapped.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/keep", nil))
+	if !sawTxn {
+		t.Error("non-filtered path should run with a New Relic transaction in request context")
 	}
 }

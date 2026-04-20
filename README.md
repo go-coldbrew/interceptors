@@ -296,13 +296,13 @@ Deprecated: HystrixClientInterceptor wraps the unmaintained hystrix\-go library.
 See [ExecutorClientInterceptor](<#ExecutorClientInterceptor>) for the replacement.
 
 <a name="NRHttpTracer"></a>
-## func [NRHttpTracer](<https://github.com/go-coldbrew/interceptors/blob/main/http.go#L61>)
+## func [NRHttpTracer](<https://github.com/go-coldbrew/interceptors/blob/main/http.go#L65>)
 
 ```go
 func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
 ```
 
-NRHttpTracer adds newrelic tracing to this http function
+NRHttpTracer wraps an HTTP handler with New Relic tracing. The configured filterFunc \(see SetFilterFunc\) is consulted on every request: paths it rejects run the underlying handler without starting a New Relic transaction. When pattern is non\-empty, newrelic.WrapHandleFunc is used so its route\-level instrumentation stays intact for non\-filtered paths.
 
 <a name="NewRelicClientInterceptor"></a>
 ## func [NewRelicClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L78>)
