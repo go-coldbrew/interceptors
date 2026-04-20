@@ -57,14 +57,25 @@ func DoHTTPtoGRPC(ctx context.Context, svr any, handler func(ctx context.Context
 	return handler(ctx, in)
 }
 
-// NRHttpTracer adds newrelic tracing to this http function
+// NRHttpTracer wraps an HTTP handler with New Relic tracing. The configured
+// filterFunc (see SetFilterFunc) is consulted on every request: paths it
+// rejects run the underlying handler without starting a New Relic
+// transaction. When pattern is non-empty, newrelic.WrapHandleFunc is used so
+// its route-level instrumentation stays intact for non-filtered paths.
 func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc) {
 	app := nrutil.GetNewRelicApp()
 	if app == nil {
 		return pattern, h
 	}
 	if pattern != "" {
-		return newrelic.WrapHandleFunc(app, pattern, h)
+		wrappedPattern, wrappedHandler := newrelic.WrapHandleFunc(app, pattern, h)
+		return wrappedPattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if defaultConfig.filterFunc(context.Background(), r.URL.Path) {
+				wrappedHandler(w, r)
+				return
+			}
+			h(w, r)
+		})
 	}
 	return pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// filter functions we do not need
