@@ -78,7 +78,6 @@ func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
 		})
 	}
 	return pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// filter functions we do not need
 		if defaultConfig.filterFunc(r.Context(), r.URL.Path) {
 			txn := app.StartTransaction(r.Method + " " + r.URL.Path)
 			defer txn.End()
