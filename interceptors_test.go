@@ -131,6 +131,36 @@ func TestSetFilterMethods(t *testing.T) {
 	}
 }
 
+// TestFilterMethods_DirectMutationDetected guards issue #41: the cache must
+// invalidate when the deprecated FilterMethods var is mutated in place,
+// including at indices beyond 0 (which the old length/first-element probe
+// missed).
+func TestFilterMethods_DirectMutationDetected(t *testing.T) {
+	defer resetGlobals()
+	ctx := grpcContext()
+
+	// Prime the cache.
+	if !FilterMethodsFunc(ctx, "/svc.A/Foo") {
+		t.Fatal("expected /svc.A/Foo to pass default filter")
+	}
+	if FilterMethodsFunc(ctx, "/svc.A/healthcheck") {
+		t.Fatal("expected /svc.A/healthcheck to be filtered by default")
+	}
+
+	// Mutate an element other than index 0 — the old detection would miss this.
+	// Default is {"healthcheck", "readycheck", "serverreflectioninfo"}; replace
+	// "readycheck" with "foo" so /svc.A/Foo should now be filtered and
+	// /svc.A/readycheck should pass.
+	FilterMethods[1] = "foo"
+
+	if FilterMethodsFunc(ctx, "/svc.A/Foo") {
+		t.Error("/svc.A/Foo should be filtered after index-1 mutation")
+	}
+	if !FilterMethodsFunc(ctx, "/svc.A/readycheck") {
+		t.Error("/svc.A/readycheck should pass after 'readycheck' was replaced at index 1")
+	}
+}
+
 func TestFilterMethodsFunc_HTTPPathNotCached(t *testing.T) {
 	defer resetGlobals()
 	// HTTP context (no gRPC metadata) — results should not be cached.

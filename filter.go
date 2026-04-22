@@ -14,9 +14,9 @@ type FilterFunc func(ctx context.Context, fullMethodName string) bool
 
 var (
 	// Deprecated: FilterMethods is the list of methods that are filtered by default.
-	// Use SetFilterMethods instead. Only some direct mutations (replacing the slice
-	// or changing the first element) are detected by internal change detection;
-	// other in-place changes may not invalidate caches correctly.
+	// Use SetFilterMethods instead. Any direct mutation (replacing the slice
+	// or editing it in place) is detected via a content hash.
+	// SetFilterMethods is the supported API for updating the filter list.
 	FilterMethods = []string{"healthcheck", "readycheck", "serverreflectioninfo"}
 )
 
@@ -24,10 +24,9 @@ var (
 // A new filterState is created whenever FilterMethods changes, which
 // atomically invalidates the old cache.
 type filterState struct {
-	methods     []string // lowercased filter substrings
-	cache       sync.Map // map[string]bool
-	sourceLen   int      // len(FilterMethods) when this state was built
-	sourceFirst string   // FilterMethods[0] when built (fast mutation check)
+	methods    []string // lowercased filter substrings
+	cache      sync.Map // map[string]bool
+	sourceHash uint64   // FNV-1a hash of FilterMethods at build time
 }
 
 var currentFilter atomic.Pointer[filterState]
@@ -36,31 +35,44 @@ func init() {
 	currentFilter.Store(buildFilterState())
 }
 
+// hashFilterMethods returns an FNV-1a 64-bit hash of the slice contents.
+// Written to avoid allocations (no []byte conversions or fmt calls) because
+// it runs on every FilterMethodsFunc call to detect direct mutations of
+// the deprecated FilterMethods variable.
+func hashFilterMethods(s []string) uint64 {
+	const (
+		offset64 uint64 = 14695981039346656037
+		prime64  uint64 = 1099511628211
+	)
+	h := offset64
+	for _, v := range s {
+		// Mix the length first so ["ab","c"] and ["a","bc"] produce
+		// different input byte streams for the hash.
+		h ^= uint64(len(v))
+		h *= prime64
+		for i := 0; i < len(v); i++ {
+			h ^= uint64(v[i])
+			h *= prime64
+		}
+	}
+	return h
+}
+
 func buildFilterState() *filterState {
 	lower := make([]string, len(FilterMethods))
 	for i, m := range FilterMethods {
 		lower[i] = strings.ToLower(m)
 	}
-	s := &filterState{
-		methods:   lower,
-		sourceLen: len(FilterMethods),
+	return &filterState{
+		methods:    lower,
+		sourceHash: hashFilterMethods(FilterMethods),
 	}
-	if len(FilterMethods) > 0 {
-		s.sourceFirst = FilterMethods[0]
-	}
-	return s
 }
 
 // changed reports whether the deprecated FilterMethods variable
 // has been mutated since this filterState was built.
 func (s *filterState) changed() bool {
-	if len(FilterMethods) != s.sourceLen {
-		return true
-	}
-	if s.sourceLen > 0 && FilterMethods[0] != s.sourceFirst {
-		return true
-	}
-	return false
+	return hashFilterMethods(FilterMethods) != s.sourceHash
 }
 
 // SetFilterMethods sets the list of method substrings to exclude from tracing/logging.
