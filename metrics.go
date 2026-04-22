@@ -18,12 +18,12 @@ var (
 )
 
 // registerOrReuse registers c with the default Prometheus registry and
-// returns the collector that is actually registered. If a collector with
-// the same fully-qualified name is already registered, returns that
-// existing collector so its accumulated observations are preserved —
-// callers should swap to the returned collector rather than use the
-// argument, which would otherwise be dropped. On any other registration
-// error, logs and returns c so callers still get a usable instance (its
+// returns the collector callers should use. If a collector with the same
+// fully-qualified name is already registered, returns that existing
+// collector so its accumulated observations are preserved — callers
+// should swap to the returned collector rather than use the argument,
+// which would otherwise be dropped. On any other registration error,
+// logs and returns c so callers still get a usable instance (its
 // observations will not be exported).
 func registerOrReuse(c prometheus.Collector) prometheus.Collector {
 	err := prometheus.Register(c)
