@@ -27,8 +27,12 @@ var (
 	protoValidatorVal  protovalidate.Validator
 )
 
-// getProtoValidator returns a cached protovalidate.Validator configured with
-// custom options if set, falling back to GlobalValidator.
+// getProtoValidator returns a cached protovalidate.Validator configured
+// with the options stored in defaultConfig.protoValidateOpts (validated
+// at SetProtoValidateOptions time), or GlobalValidator when no custom
+// options were supplied. The error path on protovalidate.New is a
+// defensive backstop — under normal use SetProtoValidateOptions has
+// already rejected bad options.
 func getProtoValidator() protovalidate.Validator {
 	protoValidatorOnce.Do(func() {
 		if len(defaultConfig.protoValidateOpts) > 0 {

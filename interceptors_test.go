@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"buf.build/go/protovalidate"
 	"github.com/go-coldbrew/errors/notifier"
 	"github.com/go-coldbrew/log"
 	"github.com/go-coldbrew/log/loggers"
@@ -2389,5 +2390,67 @@ func TestRegisterOrReuse_ReusesExisting(t *testing.T) {
 	got := registerOrReuse(second)
 	if got != prometheus.Collector(first) {
 		t.Error("expected registerOrReuse to return the already-registered collector, not the new one")
+	}
+}
+
+// --- SetProtoValidateOptions tests (issue #44) ---
+
+func TestSetProtoValidateOptions_Success(t *testing.T) {
+	defer resetGlobals()
+	resetGlobals()
+
+	if err := SetProtoValidateOptions(protovalidate.WithFailFast()); err != nil {
+		t.Fatalf("expected nil error for valid option, got %v", err)
+	}
+	if got := len(defaultConfig.protoValidateOpts); got != 1 {
+		t.Errorf("expected 1 stored option, got %d", got)
+	}
+}
+
+func TestSetProtoValidateOptions_AccumulatesAcrossCalls(t *testing.T) {
+	defer resetGlobals()
+	resetGlobals()
+
+	if err := SetProtoValidateOptions(protovalidate.WithFailFast()); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	if err := SetProtoValidateOptions(protovalidate.WithAllowUnknownFields()); err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if got := len(defaultConfig.protoValidateOpts); got != 2 {
+		t.Errorf("expected 2 stored options after two successful calls, got %d", got)
+	}
+}
+
+// TestSetProtoValidateOptions_ErrorReturned guards issue #44: when
+// protovalidate.New rejects the combined option set, SetProtoValidateOptions
+// must return the error and NOT append the rejected options to
+// defaultConfig.protoValidateOpts (so a caller that ignores the error keeps
+// the previously-accepted option set rather than silently corrupting state).
+func TestSetProtoValidateOptions_ErrorReturned(t *testing.T) {
+	defer resetGlobals()
+	resetGlobals()
+
+	// Pre-load a valid option so we can verify it survives a later failure.
+	if err := SetProtoValidateOptions(protovalidate.WithFailFast()); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	sentinel := errors.New("synthetic protovalidate failure")
+	orig := protovalidateNew
+	defer func() { protovalidateNew = orig }()
+	protovalidateNew = func(...protovalidate.ValidatorOption) (protovalidate.Validator, error) {
+		return nil, sentinel
+	}
+
+	err := SetProtoValidateOptions(protovalidate.WithAllowUnknownFields())
+	if err == nil {
+		t.Fatal("expected error from SetProtoValidateOptions when protovalidate.New fails")
+	}
+	if !errors.Is(err, sentinel) {
+		t.Errorf("expected wrapped sentinel error, got %v", err)
+	}
+	if got := len(defaultConfig.protoValidateOpts); got != 1 {
+		t.Errorf("rejected option must not be appended; expected 1 stored option (the pre-existing one), got %d", got)
 	}
 }
