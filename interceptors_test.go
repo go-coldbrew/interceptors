@@ -2397,7 +2397,6 @@ func TestRegisterOrReuse_ReusesExisting(t *testing.T) {
 
 func TestSetProtoValidateOptions_Success(t *testing.T) {
 	defer resetGlobals()
-	resetGlobals()
 
 	if err := SetProtoValidateOptions(protovalidate.WithFailFast()); err != nil {
 		t.Fatalf("expected nil error for valid option, got %v", err)
@@ -2409,7 +2408,6 @@ func TestSetProtoValidateOptions_Success(t *testing.T) {
 
 func TestSetProtoValidateOptions_AccumulatesAcrossCalls(t *testing.T) {
 	defer resetGlobals()
-	resetGlobals()
 
 	if err := SetProtoValidateOptions(protovalidate.WithFailFast()); err != nil {
 		t.Fatalf("first call: %v", err)
@@ -2429,7 +2427,6 @@ func TestSetProtoValidateOptions_AccumulatesAcrossCalls(t *testing.T) {
 // the previously-accepted option set rather than silently corrupting state).
 func TestSetProtoValidateOptions_ErrorReturned(t *testing.T) {
 	defer resetGlobals()
-	resetGlobals()
 
 	// Pre-load a valid option so we can verify it survives a later failure.
 	if err := SetProtoValidateOptions(protovalidate.WithFailFast()); err != nil {
@@ -2452,5 +2449,27 @@ func TestSetProtoValidateOptions_ErrorReturned(t *testing.T) {
 	}
 	if got := len(defaultConfig.protoValidateOpts); got != 1 {
 		t.Errorf("rejected option must not be appended; expected 1 stored option (the pre-existing one), got %d", got)
+	}
+}
+
+// TestSetProtoValidateOptions_InvalidatesCache guards against the silent-stale
+// path: if getProtoValidator() ran before a later SetProtoValidateOptions, the
+// cached validator must be rebuilt so the new options actually take effect.
+func TestSetProtoValidateOptions_InvalidatesCache(t *testing.T) {
+	defer resetGlobals()
+
+	// Warm the cache with no options — should yield GlobalValidator.
+	if got := getProtoValidator(); got != protovalidate.GlobalValidator {
+		t.Fatalf("expected GlobalValidator before any options are set, got %T", got)
+	}
+
+	if err := SetProtoValidateOptions(protovalidate.WithFailFast()); err != nil {
+		t.Fatalf("SetProtoValidateOptions: %v", err)
+	}
+
+	// Cache must have been invalidated; the next call rebuilds with the new
+	// option set, producing a non-Global validator.
+	if got := getProtoValidator(); got == protovalidate.GlobalValidator {
+		t.Error("expected getProtoValidator to rebuild after SetProtoValidateOptions; still returning GlobalValidator")
 	}
 }

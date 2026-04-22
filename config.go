@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"buf.build/go/protovalidate"
@@ -162,6 +163,11 @@ var protovalidateNew = protovalidate.New
 // the error keep working with whatever option set was last accepted —
 // the lazy getProtoValidator path still falls back to GlobalValidator on
 // error as a defensive backstop.
+//
+// On success the cached validator is invalidated so the next
+// getProtoValidator() rebuilds with the updated option set; this matters
+// when SetProtoValidateOptions is called after DefaultInterceptors() has
+// already constructed ProtoValidateInterceptor.
 func SetProtoValidateOptions(opts ...protovalidate.ValidatorOption) error {
 	candidate := make([]protovalidate.ValidatorOption, 0, len(defaultConfig.protoValidateOpts)+len(opts))
 	candidate = append(candidate, defaultConfig.protoValidateOpts...)
@@ -170,6 +176,8 @@ func SetProtoValidateOptions(opts ...protovalidate.ValidatorOption) error {
 		return fmt.Errorf("protovalidate options rejected: %w", err)
 	}
 	defaultConfig.protoValidateOpts = candidate
+	protoValidatorOnce = sync.Once{}
+	protoValidatorVal = nil
 	return nil
 }
 

@@ -97,7 +97,7 @@ var (
 ```
 
 <a name="AddStreamClientInterceptor"></a>
-## func [AddStreamClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L126>)
+## func [AddStreamClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L127>)
 
 ```go
 func AddStreamClientInterceptor(ctx context.Context, i ...grpc.StreamClientInterceptor)
@@ -106,7 +106,7 @@ func AddStreamClientInterceptor(ctx context.Context, i ...grpc.StreamClientInter
 AddStreamClientInterceptor adds a client stream interceptor to default client stream interceptors. Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
 
 <a name="AddStreamServerInterceptor"></a>
-## func [AddStreamServerInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L107>)
+## func [AddStreamServerInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L108>)
 
 ```go
 func AddStreamServerInterceptor(ctx context.Context, i ...grpc.StreamServerInterceptor)
@@ -115,7 +115,7 @@ func AddStreamServerInterceptor(ctx context.Context, i ...grpc.StreamServerInter
 AddStreamServerInterceptor adds a server interceptor to default server interceptors. Must be called during initialization, before the server starts. Not safe for concurrent use.
 
 <a name="AddUnaryClientInterceptor"></a>
-## func [AddUnaryClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L120>)
+## func [AddUnaryClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L121>)
 
 ```go
 func AddUnaryClientInterceptor(ctx context.Context, i ...grpc.UnaryClientInterceptor)
@@ -124,7 +124,7 @@ func AddUnaryClientInterceptor(ctx context.Context, i ...grpc.UnaryClientInterce
 AddUnaryClientInterceptor adds a client interceptor to default client interceptors. Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
 
 <a name="AddUnaryServerInterceptor"></a>
-## func [AddUnaryServerInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L101>)
+## func [AddUnaryServerInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L102>)
 
 ```go
 func AddUnaryServerInterceptor(ctx context.Context, i ...grpc.UnaryServerInterceptor)
@@ -276,7 +276,7 @@ func GRPCClientInterceptor(_ ...any) grpc.UnaryClientInterceptor
 Deprecated: GRPCClientInterceptor is no longer needed. gRPC tracing is now handled by google.golang.org/grpc/stats/opentelemetry, configured via opentelemetry.DialOption\(\) at the client level. This function is retained for backwards compatibility but returns a no\-op interceptor.
 
 <a name="GetDebugLogHeaderName"></a>
-## func [GetDebugLogHeaderName](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L201>)
+## func [GetDebugLogHeaderName](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L209>)
 
 ```go
 func GetDebugLogHeaderName() string
@@ -404,7 +404,7 @@ func ServerErrorStreamInterceptor() grpc.StreamServerInterceptor
 ServerErrorStreamInterceptor intercepts server errors for stream RPCs and reports them to the error notifier.
 
 <a name="SetClientMetricsOptions"></a>
-## func [SetClientMetricsOptions](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L145>)
+## func [SetClientMetricsOptions](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L146>)
 
 ```go
 func SetClientMetricsOptions(opts ...grpcprom.ClientMetricsOption)
@@ -413,7 +413,7 @@ func SetClientMetricsOptions(opts ...grpcprom.ClientMetricsOption)
 SetClientMetricsOptions appends gRPC client metrics options. Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
 
 <a name="SetDebugLogHeaderName"></a>
-## func [SetDebugLogHeaderName](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L192>)
+## func [SetDebugLogHeaderName](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L200>)
 
 ```go
 func SetDebugLogHeaderName(name string)
@@ -422,7 +422,7 @@ func SetDebugLogHeaderName(name string)
 SetDebugLogHeaderName sets the gRPC metadata header name that triggers per\-request log level override. Default is "x\-debug\-log\-level". The header value should be a valid log level \(e.g., "debug"\). Empty names are ignored. Must be called during initialization.
 
 <a name="SetDefaultExecutor"></a>
-## func [SetDefaultExecutor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L235>)
+## func [SetDefaultExecutor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L243>)
 
 ```go
 func SetDefaultExecutor(e Executor)
@@ -431,7 +431,7 @@ func SetDefaultExecutor(e Executor)
 SetDefaultExecutor sets the default [Executor](<#Executor>) used by [ExecutorClientInterceptor](<#ExecutorClientInterceptor>) for all outbound unary RPCs. When set, ExecutorClientInterceptor replaces [HystrixClientInterceptor](<#HystrixClientInterceptor>) in the default client interceptor chain. Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
 
 <a name="SetDefaultRateLimit"></a>
-## func [SetDefaultRateLimit](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L223>)
+## func [SetDefaultRateLimit](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L231>)
 
 ```go
 func SetDefaultRateLimit(rps float64, burst int)
@@ -440,7 +440,7 @@ func SetDefaultRateLimit(rps float64, burst int)
 SetDefaultRateLimit configures the built\-in token bucket rate limiter. rps is requests per second, burst is the maximum burst size. This is a per\-pod in\-memory limit — with N pods, the effective cluster\-wide limit is N × rps. For distributed rate limiting, use SetRateLimiter\(\) with a custom implementation \(e.g., Redis\-backed\). Must be called during initialization.
 
 <a name="SetDefaultTimeout"></a>
-## func [SetDefaultTimeout](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L87>)
+## func [SetDefaultTimeout](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L88>)
 
 ```go
 func SetDefaultTimeout(d time.Duration)
@@ -449,7 +449,7 @@ func SetDefaultTimeout(d time.Duration)
 SetDefaultTimeout sets the default timeout applied to incoming unary RPCs that arrive without a deadline. When set to \<= 0, the timeout interceptor is disabled \(pass\-through\). Default is 60s. Must be called during initialization, before the server starts. Not safe for concurrent use.
 
 <a name="SetDisableDebugLogInterceptor"></a>
-## func [SetDisableDebugLogInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L184>)
+## func [SetDisableDebugLogInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L192>)
 
 ```go
 func SetDisableDebugLogInterceptor(disable bool)
@@ -458,7 +458,7 @@ func SetDisableDebugLogInterceptor(disable bool)
 SetDisableDebugLogInterceptor disables the DebugLogInterceptor in the default interceptor chain. Must be called during initialization, before the server starts.
 
 <a name="SetDisableProtoValidate"></a>
-## func [SetDisableProtoValidate](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L178>)
+## func [SetDisableProtoValidate](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L186>)
 
 ```go
 func SetDisableProtoValidate(disable bool)
@@ -467,7 +467,7 @@ func SetDisableProtoValidate(disable bool)
 SetDisableProtoValidate disables the protovalidate interceptor in the default chain. Must be called during init\(\) — not safe for concurrent use.
 
 <a name="SetDisableRateLimit"></a>
-## func [SetDisableRateLimit](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L207>)
+## func [SetDisableRateLimit](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L215>)
 
 ```go
 func SetDisableRateLimit(disable bool)
@@ -476,7 +476,7 @@ func SetDisableRateLimit(disable bool)
 SetDisableRateLimit disables the rate limiting interceptor in the default interceptor chain. Must be called during initialization.
 
 <a name="SetFilterFunc"></a>
-## func [SetFilterFunc](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L93>)
+## func [SetFilterFunc](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L94>)
 
 ```go
 func SetFilterFunc(ctx context.Context, ff FilterFunc)
@@ -494,7 +494,7 @@ func SetFilterMethods(ctx context.Context, methods []string)
 SetFilterMethods sets the list of method substrings to exclude from tracing/logging. It rebuilds the internal cache. Must be called during initialization, before the server starts. Not safe for concurrent use.
 
 <a name="SetProtoValidateOptions"></a>
-## func [SetProtoValidateOptions](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L165>)
+## func [SetProtoValidateOptions](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L171>)
 
 ```go
 func SetProtoValidateOptions(opts ...protovalidate.ValidatorOption) error
@@ -504,8 +504,10 @@ SetProtoValidateOptions configures custom protovalidate options \(e.g., custom c
 
 The combined option set \(existing \+ new\) is validated immediately by constructing a protovalidate.Validator. If construction fails, the new options are NOT appended and the error is returned so the caller can surface it \(typically by failing process startup\). Callers that ignore the error keep working with whatever option set was last accepted — the lazy getProtoValidator path still falls back to GlobalValidator on error as a defensive backstop.
 
+On success the cached validator is invalidated so the next getProtoValidator\(\) rebuilds with the updated option set; this matters when SetProtoValidateOptions is called after DefaultInterceptors\(\) has already constructed ProtoValidateInterceptor.
+
 <a name="SetRateLimiter"></a>
-## func [SetRateLimiter](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L213>)
+## func [SetRateLimiter](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L221>)
 
 ```go
 func SetRateLimiter(limiter ratelimit_middleware.Limiter)
@@ -514,7 +516,7 @@ func SetRateLimiter(limiter ratelimit_middleware.Limiter)
 SetRateLimiter sets a custom rate limiter implementation. This overrides the built\-in token bucket limiter. Must be called during initialization.
 
 <a name="SetResponseTimeLogErrorOnly"></a>
-## func [SetResponseTimeLogErrorOnly](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L79>)
+## func [SetResponseTimeLogErrorOnly](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L80>)
 
 ```go
 func SetResponseTimeLogErrorOnly(errorOnly bool)
@@ -523,7 +525,7 @@ func SetResponseTimeLogErrorOnly(errorOnly bool)
 SetResponseTimeLogErrorOnly when set to true, only logs response time when the request returns an error. Successful requests are not logged. Must be called during initialization, before the server starts. Not safe for concurrent use.
 
 <a name="SetResponseTimeLogLevel"></a>
-## func [SetResponseTimeLogLevel](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L72>)
+## func [SetResponseTimeLogLevel](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L73>)
 
 ```go
 func SetResponseTimeLogLevel(ctx context.Context, level loggers.Level)
@@ -532,7 +534,7 @@ func SetResponseTimeLogLevel(ctx context.Context, level loggers.Level)
 SetResponseTimeLogLevel sets the log level for response time logging. Default is InfoLevel. Must be called during initialization, before the server starts. Not safe for concurrent use.
 
 <a name="SetServerMetricsOptions"></a>
-## func [SetServerMetricsOptions](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L139>)
+## func [SetServerMetricsOptions](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L140>)
 
 ```go
 func SetServerMetricsOptions(opts ...grpcprom.ServerMetricsOption)
@@ -550,7 +552,7 @@ func TraceIdInterceptor() grpc.UnaryServerInterceptor
 TraceIdInterceptor allows injecting trace id from request objects
 
 <a name="UseColdBrewClientInterceptors"></a>
-## func [UseColdBrewClientInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L133>)
+## func [UseColdBrewClientInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L134>)
 
 ```go
 func UseColdBrewClientInterceptors(ctx context.Context, flag bool)
@@ -559,7 +561,7 @@ func UseColdBrewClientInterceptors(ctx context.Context, flag bool)
 UseColdBrewClientInterceptors allows enabling/disabling coldbrew client interceptors. When set to false, the coldbrew client interceptors will not be used. Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
 
 <a name="UseColdBrewServerInterceptors"></a>
-## func [UseColdBrewServerInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L114>)
+## func [UseColdBrewServerInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L115>)
 
 ```go
 func UseColdBrewServerInterceptors(ctx context.Context, flag bool)
