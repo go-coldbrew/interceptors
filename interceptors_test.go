@@ -2352,6 +2352,18 @@ func TestRegisterOrReuse_NewRegistration(t *testing.T) {
 	if got != prometheus.Collector(c) {
 		t.Error("expected registerOrReuse to return the newly-registered collector")
 	}
+
+	// Confirm registration actually happened — a second Register of the same
+	// collector should fail with AlreadyRegisteredError whose ExistingCollector
+	// is c. Guards against an error path that returns c without registering.
+	err := prometheus.Register(c)
+	if err == nil {
+		t.Fatal("expected duplicate registration to fail; collector was not registered by registerOrReuse")
+	}
+	var are prometheus.AlreadyRegisteredError
+	if !errors.As(err, &are) || are.ExistingCollector != prometheus.Collector(c) {
+		t.Fatalf("expected duplicate registration to return the registered collector, got %v", err)
+	}
 }
 
 // TestRegisterOrReuse_ReusesExisting guards issue #43: when a collector with
