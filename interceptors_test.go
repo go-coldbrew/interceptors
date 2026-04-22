@@ -20,6 +20,7 @@ import (
 	ratelimit_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/ratelimit"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	newrelic "github.com/newrelic/go-agent/v3/newrelic"
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcmd "google.golang.org/grpc/metadata"
@@ -2332,5 +2333,49 @@ func TestNRHttpTracer_FilterFuncAppliedForEmptyPattern(t *testing.T) {
 	wrapped.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/keep", nil))
 	if !sawTxn {
 		t.Error("non-filtered path should run with a New Relic transaction in request context")
+	}
+}
+
+// --- registerOrReuse tests (issue #43) ---
+
+// TestRegisterOrReuse_NewRegistration exercises the happy path: a collector
+// that is not yet registered is registered, and the same collector is
+// returned.
+func TestRegisterOrReuse_NewRegistration(t *testing.T) {
+	c := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "test_registerorreuse_new",
+		Help: "test",
+	})
+	defer prometheus.Unregister(c)
+
+	got := registerOrReuse(c)
+	if got != prometheus.Collector(c) {
+		t.Error("expected registerOrReuse to return the newly-registered collector")
+	}
+}
+
+// TestRegisterOrReuse_ReusesExisting guards issue #43: when a collector with
+// the same name is already registered, registerOrReuse must return the
+// already-registered instance so its accumulated observations are preserved.
+// The previous Unregister+Register pattern would have dropped them.
+func TestRegisterOrReuse_ReusesExisting(t *testing.T) {
+	first := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "test_registerorreuse_existing",
+		Help: "test",
+	})
+	if err := prometheus.Register(first); err != nil {
+		t.Fatalf("pre-register failed: %v", err)
+	}
+	defer prometheus.Unregister(first)
+	first.Inc() // accumulate an observation that must not be lost
+
+	second := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "test_registerorreuse_existing",
+		Help: "test",
+	})
+
+	got := registerOrReuse(second)
+	if got != prometheus.Collector(first) {
+		t.Error("expected registerOrReuse to return the already-registered collector, not the new one")
 	}
 }
