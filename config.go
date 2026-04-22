@@ -2,7 +2,9 @@ package interceptors
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"buf.build/go/protovalidate"
@@ -145,11 +147,38 @@ func SetClientMetricsOptions(opts ...grpcprom.ClientMetricsOption) {
 	defaultConfig.cltMetricsOpts = append(defaultConfig.cltMetricsOpts, opts...)
 }
 
+// protovalidateNew is a test seam over protovalidate.New so the error
+// path of SetProtoValidateOptions can be exercised without engineering
+// a real failing option set.
+var protovalidateNew = protovalidate.New
+
 // SetProtoValidateOptions configures custom protovalidate options (e.g.,
 // custom constraints). Must be called during init() — not safe for
 // concurrent use. Follows ColdBrew's init-only config pattern.
-func SetProtoValidateOptions(opts ...protovalidate.ValidatorOption) {
-	defaultConfig.protoValidateOpts = append(defaultConfig.protoValidateOpts, opts...)
+//
+// The combined option set (existing + new) is validated immediately by
+// constructing a protovalidate.Validator. If construction fails, the new
+// options are NOT appended and the error is returned so the caller can
+// surface it (typically by failing process startup). Callers that ignore
+// the error keep working with whatever option set was last accepted —
+// the lazy getProtoValidator path still falls back to GlobalValidator on
+// error as a defensive backstop.
+//
+// On success the cached validator is invalidated so the next
+// getProtoValidator() rebuilds with the updated option set; this matters
+// when SetProtoValidateOptions is called after DefaultInterceptors() has
+// already constructed ProtoValidateInterceptor.
+func SetProtoValidateOptions(opts ...protovalidate.ValidatorOption) error {
+	candidate := make([]protovalidate.ValidatorOption, 0, len(defaultConfig.protoValidateOpts)+len(opts))
+	candidate = append(candidate, defaultConfig.protoValidateOpts...)
+	candidate = append(candidate, opts...)
+	if _, err := protovalidateNew(candidate...); err != nil {
+		return fmt.Errorf("protovalidate options rejected: %w", err)
+	}
+	defaultConfig.protoValidateOpts = candidate
+	protoValidatorOnce = sync.Once{}
+	protoValidatorVal = nil
+	return nil
 }
 
 // SetDisableProtoValidate disables the protovalidate interceptor in the
