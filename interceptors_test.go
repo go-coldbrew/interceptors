@@ -434,7 +434,7 @@ func TestHystrixClientInterceptor(t *testing.T) {
 func TestExecutorClientInterceptor(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("no executor passthrough", func(t *testing.T) {
+	t.Run("no executor falls back to hystrix", func(t *testing.T) {
 		resetGlobals()
 		interceptor := ExecutorClientInterceptor()
 		invokerCalled := false
@@ -509,6 +509,35 @@ func TestExecutorClientInterceptor(t *testing.T) {
 		}
 		if !perCallCalled {
 			t.Error("per-call executor was not called")
+		}
+	})
+
+	t.Run("per-call executor without global executor", func(t *testing.T) {
+		resetGlobals()
+		defer resetGlobals()
+
+		perCallCalled := false
+		perCallExec := func(ctx context.Context, method string, fn func(ctx context.Context) error) error {
+			perCallCalled = true
+			return fn(ctx)
+		}
+
+		interceptor := ExecutorClientInterceptor()
+		invokerCalled := false
+		invoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+			invokerCalled = true
+			return nil
+		}
+
+		err := interceptor(ctx, "/test/Method", nil, nil, nil, invoker, WithExecutor(perCallExec))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !perCallCalled {
+			t.Error("per-call executor should be used even without global executor")
+		}
+		if !invokerCalled {
+			t.Error("invoker was not called")
 		}
 	})
 
@@ -716,6 +745,102 @@ func TestDefaultClientInterceptors_ExecutorBranching(t *testing.T) {
 		}
 		if !executorCalled {
 			t.Error("executor interceptor should have been used, not hystrix")
+		}
+	})
+
+	t.Run("per-call WithExecutor works without global executor", func(t *testing.T) {
+		resetGlobals()
+		defer resetGlobals()
+
+		perCallCalled := false
+		perCallExec := func(ctx context.Context, method string, fn func(ctx context.Context) error) error {
+			perCallCalled = true
+			return fn(ctx)
+		}
+
+		ints := DefaultClientInterceptors()
+		if len(ints) == 0 {
+			t.Fatal("expected interceptors in default chain")
+		}
+		invoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+			return nil
+		}
+		err := ints[0](context.Background(), "/test/Method", nil, nil, nil, invoker, WithExecutor(perCallExec))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !perCallCalled {
+			t.Error("per-call executor should be used even without global executor")
+		}
+	})
+
+	t.Run("per-connection WithExecutor works without global executor", func(t *testing.T) {
+		resetGlobals()
+		defer resetGlobals()
+
+		connExecCalled := false
+		connExec := func(ctx context.Context, method string, fn func(ctx context.Context) error) error {
+			connExecCalled = true
+			return fn(ctx)
+		}
+
+		ints := DefaultClientInterceptors(WithExecutor(connExec))
+		if len(ints) == 0 {
+			t.Fatal("expected interceptors in default chain")
+		}
+		invoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+			return nil
+		}
+		err := ints[0](context.Background(), "/test/Method", nil, nil, nil, invoker)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !connExecCalled {
+			t.Error("per-connection executor should be used even without global executor")
+		}
+	})
+
+	t.Run("WithoutHystrix passthrough without global executor", func(t *testing.T) {
+		resetGlobals()
+		defer resetGlobals()
+
+		ints := DefaultClientInterceptors()
+		if len(ints) == 0 {
+			t.Fatal("expected interceptors in default chain")
+		}
+		invokerCalled := false
+		invoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+			invokerCalled = true
+			return nil
+		}
+		err := ints[0](context.Background(), "/test/Method", nil, nil, nil, invoker, WithoutHystrix())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !invokerCalled {
+			t.Error("invoker should be called directly when WithoutHystrix is set")
+		}
+	})
+
+	t.Run("WithoutExecutor passthrough without global executor", func(t *testing.T) {
+		resetGlobals()
+		defer resetGlobals()
+
+		ints := DefaultClientInterceptors()
+		if len(ints) == 0 {
+			t.Fatal("expected interceptors in default chain")
+		}
+		invokerCalled := false
+		invoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+			invokerCalled = true
+			return nil
+		}
+		err := ints[0](context.Background(), "/test/Method", nil, nil, nil, invoker, WithoutExecutor())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !invokerCalled {
+			t.Error("invoker should be called directly when WithoutExecutor is set")
 		}
 	})
 }

@@ -33,11 +33,7 @@ func DefaultClientInterceptors(defaultOpts ...any) []grpc.UnaryClientInterceptor
 				callOptions = append(callOptions, o)
 			}
 		}
-		if defaultConfig.defaultExecutor != nil {
-			ints = append(ints, ExecutorClientInterceptor(callOptions...))
-		} else {
-			ints = append(ints, HystrixClientInterceptor(callOptions...))
-		}
+		ints = append(ints, ExecutorClientInterceptor(callOptions...))
 		ints = append(ints,
 			grpc_retry.UnaryClientInterceptor(),
 			NewRelicClientInterceptor(),
@@ -105,8 +101,11 @@ func GRPCClientInterceptor(_ ...any) grpc.UnaryClientInterceptor {
 // RPC in an [Executor]. The executor provides resilience logic such as circuit
 // breaking, retries, or bulkheading.
 //
-// If no executor is configured (neither via [SetDefaultExecutor] nor per-call
-// [WithExecutor]), the RPC is invoked directly as a passthrough.
+// Executor resolution order: per-call [WithExecutor] > global [SetDefaultExecutor].
+// When no executor is configured, the interceptor falls back to
+// [HystrixClientInterceptor] for backward compatibility. When the caller
+// explicitly opts out via [WithoutExecutor] or [WithoutHystrix], the RPC is
+// invoked directly as a passthrough.
 //
 // Excluded errors and codes (set via [WithExcludedErrors] / [WithExcludedCodes])
 // are reported as nil to the executor, preventing them from tripping circuit
@@ -129,13 +128,18 @@ func ExecutorClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientI
 			}
 		}
 
-		// Resolve executor: per-call > global > nil (passthrough)
+		// Resolve executor: per-call > global > hystrix fallback
 		exec := defaultConfig.defaultExecutor
 		if o.hasExecutor {
 			exec = o.executor
 		}
 		if exec == nil {
-			return invoker(ctx, method, req, reply, cc, opts...)
+			if o.hasExecutor {
+				// Caller explicitly opted out (WithoutExecutor / WithoutHystrix).
+				return invoker(ctx, method, req, reply, cc, opts...)
+			}
+			// No executor configured; fall back to Hystrix for backward compat.
+			return hystrixFallback(ctx, method, req, reply, cc, invoker, opts, o)
 		}
 
 		var invokerErr error
@@ -165,6 +169,48 @@ func ExecutorClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientI
 		}
 		return executorErr
 	}
+}
+
+// hystrixFallback runs the RPC through the deprecated Hystrix circuit breaker.
+// Called only when no executor is configured (neither global nor per-call),
+// preserving backward compatibility for services that have not migrated.
+func hystrixFallback(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts []grpc.CallOption, o clientOptions) error {
+	if o.disableHystrix {
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+	hystrixCmd := o.hystrixName
+	if hystrixCmd == "" {
+		hystrixCmd = method
+	}
+	newCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var invokerErr error
+	hystrixErr := hystrix.Do(hystrixCmd, func() (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = errors.Wrap(fmt.Errorf("panic inside hystrix method: %s, req: %v, reply: %v", method, req, reply), "Hystrix")
+				log.Error(ctx, "panic", r, "method", method, "req", req, "reply", reply)
+			}
+		}()
+		defer notifier.NotifyOnPanic(newCtx, method)
+		invokerErr = invoker(newCtx, method, req, reply, cc, opts...)
+		for _, excludedErr := range o.excludedErrors {
+			if stdError.Is(invokerErr, excludedErr) {
+				return nil
+			}
+		}
+		if st, ok := status.FromError(invokerErr); ok {
+			if slices.Contains(o.excludedCodes, st.Code()) {
+				return nil
+			}
+		}
+		return invokerErr
+	}, nil)
+	if invokerErr != nil {
+		return invokerErr
+	}
+	return hystrixErr
 }
 
 // Deprecated: HystrixClientInterceptor wraps the unmaintained hystrix-go library.

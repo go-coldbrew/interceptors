@@ -237,8 +237,10 @@ func SetDefaultRateLimit(rps float64, burst int) {
 }
 
 // SetDefaultExecutor sets the default [Executor] used by [ExecutorClientInterceptor]
-// for all outbound unary RPCs. When set, ExecutorClientInterceptor replaces
-// [HystrixClientInterceptor] in the default client interceptor chain.
+// for all outbound unary RPCs. The default client interceptor chain always uses
+// [ExecutorClientInterceptor]; when no executor is configured (neither global via
+// SetDefaultExecutor nor per-call via [WithExecutor]), it falls back to
+// [HystrixClientInterceptor] for backward compatibility.
 // Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
 func SetDefaultExecutor(e Executor) {
 	defaultConfig.defaultExecutor = e
