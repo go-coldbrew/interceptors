@@ -172,8 +172,10 @@ func ExecutorClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientI
 }
 
 // hystrixFallback runs the RPC through the deprecated Hystrix circuit breaker.
-// Called only when no executor is configured (neither global nor per-call),
-// preserving backward compatibility for services that have not migrated.
+// It is the shared Hystrix implementation used both as the executor fallback
+// when no executor is configured (neither global nor per-call) and by
+// [HystrixClientInterceptor], preserving backward compatibility for services
+// that have not migrated.
 func hystrixFallback(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts []grpc.CallOption, o clientOptions) error {
 	if o.disableHystrix {
 		return invoker(ctx, method, req, reply, cc, opts...)
