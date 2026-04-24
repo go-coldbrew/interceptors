@@ -156,7 +156,7 @@ func DebugLoggingInterceptor() grpc.UnaryServerInterceptor
 DebugLoggingInterceptor is the interceptor that logs all request/response from a handler
 
 <a name="DefaultClientInterceptor"></a>
-## func [DefaultClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L66>)
+## func [DefaultClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L62>)
 
 ```go
 func DefaultClientInterceptor(defaultOpts ...any) grpc.UnaryClientInterceptor
@@ -174,7 +174,7 @@ func DefaultClientInterceptors(defaultOpts ...any) []grpc.UnaryClientInterceptor
 DefaultClientInterceptors are the set of default interceptors that should be applied to all client calls
 
 <a name="DefaultClientStreamInterceptor"></a>
-## func [DefaultClientStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L71>)
+## func [DefaultClientStreamInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L67>)
 
 ```go
 func DefaultClientStreamInterceptor(defaultOpts ...any) grpc.StreamClientInterceptor
@@ -183,7 +183,7 @@ func DefaultClientStreamInterceptor(defaultOpts ...any) grpc.StreamClientInterce
 DefaultClientStreamInterceptor are the set of default interceptors that should be applied to all stream client calls
 
 <a name="DefaultClientStreamInterceptors"></a>
-## func [DefaultClientStreamInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L51>)
+## func [DefaultClientStreamInterceptors](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L47>)
 
 ```go
 func DefaultClientStreamInterceptors(defaultOpts ...any) []grpc.StreamClientInterceptor
@@ -245,7 +245,7 @@ func (s *svc) echo(ctx context.Context, req *proto.EchoRequest) (*proto.EchoResp
 ```
 
 <a name="ExecutorClientInterceptor"></a>
-## func [ExecutorClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L114>)
+## func [ExecutorClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L113>)
 
 ```go
 func ExecutorClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientInterceptor
@@ -253,7 +253,7 @@ func ExecutorClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientI
 
 ExecutorClientInterceptor returns a unary client interceptor that wraps each RPC in an [Executor](<#Executor>). The executor provides resilience logic such as circuit breaking, retries, or bulkheading.
 
-If no executor is configured \(neither via [SetDefaultExecutor](<#SetDefaultExecutor>) nor per\-call \[WithExecutor\]\), the RPC is invoked directly as a passthrough.
+Executor resolution order: per\-call \[WithExecutor\] \> global [SetDefaultExecutor](<#SetDefaultExecutor>). When no executor is configured, the interceptor falls back to [HystrixClientInterceptor](<#HystrixClientInterceptor>) for backward compatibility. When the caller explicitly opts out via \[WithoutExecutor\] or \[WithoutHystrix\], the RPC is invoked directly as a passthrough.
 
 Excluded errors and codes \(set via \[WithExcludedErrors\] / \[WithExcludedCodes\]\) are reported as nil to the executor, preventing them from tripping circuit breakers or retry logic. The original error is still returned to the caller.
 
@@ -267,7 +267,7 @@ func FilterMethodsFunc(ctx context.Context, fullMethodName string) bool
 FilterMethodsFunc is the default implementation of Filter function
 
 <a name="GRPCClientInterceptor"></a>
-## func [GRPCClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L98>)
+## func [GRPCClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L94>)
 
 ```go
 func GRPCClientInterceptor(_ ...any) grpc.UnaryClientInterceptor
@@ -285,7 +285,7 @@ func GetDebugLogHeaderName() string
 GetDebugLogHeaderName returns the current debug log header name.
 
 <a name="HystrixClientInterceptor"></a>
-## func [HystrixClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L174>)
+## func [HystrixClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L220>)
 
 ```go
 func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientInterceptor
@@ -305,7 +305,7 @@ func NRHttpTracer(pattern string, h http.HandlerFunc) (string, http.HandlerFunc)
 NRHttpTracer wraps an HTTP handler with New Relic tracing. The configured filterFunc \(see SetFilterFunc\) is consulted on every request: paths it rejects run the underlying handler without starting a New Relic transaction. When pattern is non\-empty, newrelic.WrapHandleFunc is used so its route\-level instrumentation stays intact for non\-filtered paths.
 
 <a name="NewRelicClientInterceptor"></a>
-## func [NewRelicClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L78>)
+## func [NewRelicClientInterceptor](<https://github.com/go-coldbrew/interceptors/blob/main/client.go#L74>)
 
 ```go
 func NewRelicClientInterceptor() grpc.UnaryClientInterceptor
@@ -422,13 +422,13 @@ func SetDebugLogHeaderName(name string)
 SetDebugLogHeaderName sets the gRPC metadata header name that triggers per\-request log level override. Default is "x\-debug\-log\-level". The header value should be a valid log level \(e.g., "debug"\). Empty names are ignored. Must be called during initialization.
 
 <a name="SetDefaultExecutor"></a>
-## func [SetDefaultExecutor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L243>)
+## func [SetDefaultExecutor](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L245>)
 
 ```go
 func SetDefaultExecutor(e Executor)
 ```
 
-SetDefaultExecutor sets the default [Executor](<#Executor>) used by [ExecutorClientInterceptor](<#ExecutorClientInterceptor>) for all outbound unary RPCs. When set, ExecutorClientInterceptor replaces [HystrixClientInterceptor](<#HystrixClientInterceptor>) in the default client interceptor chain. Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
+SetDefaultExecutor sets the default [Executor](<#Executor>) used by [ExecutorClientInterceptor](<#ExecutorClientInterceptor>) for outbound unary RPCs when ColdBrew client interceptors are enabled \(the default\). In that configuration, when no executor is configured \(neither global via SetDefaultExecutor nor per\-call via \[WithExecutor\]\), [ExecutorClientInterceptor](<#ExecutorClientInterceptor>) falls back to [HystrixClientInterceptor](<#HystrixClientInterceptor>) for backward compatibility. Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
 
 <a name="SetDefaultRateLimit"></a>
 ## func [SetDefaultRateLimit](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L231>)
