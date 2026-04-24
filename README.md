@@ -428,7 +428,7 @@ SetDebugLogHeaderName sets the gRPC metadata header name that triggers per\-requ
 func SetDefaultExecutor(e Executor)
 ```
 
-SetDefaultExecutor sets the default [Executor](<#Executor>) used by [ExecutorClientInterceptor](<#ExecutorClientInterceptor>) for all outbound unary RPCs. The default client interceptor chain always uses [ExecutorClientInterceptor](<#ExecutorClientInterceptor>); when no executor is configured \(neither global via SetDefaultExecutor nor per\-call via \[WithExecutor\]\), it falls back to [HystrixClientInterceptor](<#HystrixClientInterceptor>) for backward compatibility. Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
+SetDefaultExecutor sets the default [Executor](<#Executor>) used by [ExecutorClientInterceptor](<#ExecutorClientInterceptor>) for outbound unary RPCs when ColdBrew client interceptors are enabled \(the default\). In that configuration, when no executor is configured \(neither global via SetDefaultExecutor nor per\-call via \[WithExecutor\]\), [ExecutorClientInterceptor](<#ExecutorClientInterceptor>) falls back to [HystrixClientInterceptor](<#HystrixClientInterceptor>) for backward compatibility. Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
 
 <a name="SetDefaultRateLimit"></a>
 ## func [SetDefaultRateLimit](<https://github.com/go-coldbrew/interceptors/blob/main/config.go#L231>)

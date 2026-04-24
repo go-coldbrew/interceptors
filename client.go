@@ -219,55 +219,21 @@ func hystrixFallback(ctx context.Context, method string, req, reply any, cc *grp
 // See [ExecutorClientInterceptor] for the replacement.
 func HystrixClientInterceptor(defaultOpts ...grpc.CallOption) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-		options := clientOptions{
-			hystrixName: method,
-		}
+		o := clientOptions{}
 		for _, opt := range defaultOpts {
 			if opt != nil {
-				if o, ok := opt.(clientOption); ok {
-					o.process(&options)
+				if co, ok := opt.(clientOption); ok {
+					co.process(&o)
 				}
 			}
 		}
 		for _, opt := range opts {
 			if opt != nil {
-				if o, ok := opt.(clientOption); ok {
-					o.process(&options)
+				if co, ok := opt.(clientOption); ok {
+					co.process(&o)
 				}
 			}
 		}
-		if options.disableHystrix {
-			// short circuit if hystrix is disabled
-			return invoker(ctx, method, req, reply, cc, opts...)
-		}
-		newCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-
-		var invokerErr error
-		hystrixErr := hystrix.Do(options.hystrixName, func() (err error) {
-			defer func() {
-				if r := recover(); r != nil {
-					err = errors.Wrap(fmt.Errorf("panic inside hystrix method: %s, req: %v, reply: %v", method, req, reply), "Hystrix")
-					log.Error(ctx, "panic", r, "method", method, "req", req, "reply", reply)
-				}
-			}()
-			defer notifier.NotifyOnPanic(newCtx, method)
-			invokerErr = invoker(newCtx, method, req, reply, cc, opts...)
-			for _, excludedErr := range options.excludedErrors {
-				if stdError.Is(invokerErr, excludedErr) {
-					return nil
-				}
-			}
-			if st, ok := status.FromError(invokerErr); ok {
-				if slices.Contains(options.excludedCodes, st.Code()) {
-					return nil
-				}
-			}
-			return invokerErr
-		}, nil)
-		if invokerErr != nil {
-			return invokerErr
-		}
-		return hystrixErr
+		return hystrixFallback(ctx, method, req, reply, cc, invoker, opts, o)
 	}
 }
