@@ -37,7 +37,7 @@ func DefaultClientInterceptors(defaultOpts ...any) []grpc.UnaryClientInterceptor
 		ints = append(ints,
 			grpc_retry.UnaryClientInterceptor(),
 			NewRelicClientInterceptor(),
-			getClientMetrics().UnaryClientInterceptor(),
+			getClientMetrics().UnaryClientInterceptor(defaultConfig.cltMetricsInterceptorOpts...),
 		)
 	}
 	return ints
@@ -53,7 +53,7 @@ func DefaultClientStreamInterceptors(defaultOpts ...any) []grpc.StreamClientInte
 		if nrutil.GetNewRelicApp() != nil {
 			ints = append(ints, nrgrpc.StreamClientInterceptor)
 		}
-		ints = append(ints, getClientMetrics().StreamClientInterceptor())
+		ints = append(ints, getClientMetrics().StreamClientInterceptor(defaultConfig.cltMetricsInterceptorOpts...))
 	}
 	return ints
 }

@@ -153,7 +153,7 @@ func DefaultInterceptors() []grpc.UnaryServerInterceptor {
 	if !defaultConfig.disableProtoValidate {
 		cb[unaryPosProtoValidate] = ProtoValidateInterceptor()
 	}
-	cb[unaryPosMetrics] = getServerMetrics().UnaryServerInterceptor()
+	cb[unaryPosMetrics] = getServerMetrics().UnaryServerInterceptor(defaultConfig.srvMetricsInterceptorOpts...)
 	cb[unaryPosServerError] = ServerErrorInterceptor()
 	cb[unaryPosNewRelic] = NewRelicInterceptor()
 	cb[unaryPosPanicRecovery] = PanicRecoveryInterceptor()
@@ -188,7 +188,7 @@ func DefaultStreamInterceptors() []grpc.StreamServerInterceptor {
 	if !defaultConfig.disableProtoValidate {
 		cb[streamPosProtoValidate] = ProtoValidateStreamInterceptor()
 	}
-	cb[streamPosMetrics] = getServerMetrics().StreamServerInterceptor()
+	cb[streamPosMetrics] = getServerMetrics().StreamServerInterceptor(defaultConfig.srvMetricsInterceptorOpts...)
 	cb[streamPosServerError] = ServerErrorStreamInterceptor()
 	cb[streamPosPanicRecovery] = PanicRecoveryStreamInterceptor()
 
