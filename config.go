@@ -39,8 +39,10 @@ type interceptorConfig struct {
 	filterFunc           FilterFunc
 
 	// Metrics options
-	srvMetricsOpts []grpcprom.ServerMetricsOption
-	cltMetricsOpts []grpcprom.ClientMetricsOption
+	srvMetricsOpts              []grpcprom.ServerMetricsOption
+	srvMetricsInterceptorOpts   []grpcprom.Option
+	cltMetricsOpts              []grpcprom.ClientMetricsOption
+	cltMetricsInterceptorOpts   []grpcprom.Option
 
 	// ProtoValidate options
 	protoValidateOpts []protovalidate.ValidatorOption
@@ -135,16 +137,51 @@ func UseColdBrewClientInterceptors(ctx context.Context, flag bool) {
 	defaultConfig.useCBClientInterceptors = flag
 }
 
-// SetServerMetricsOptions appends gRPC server metrics options (histogram, labels, namespace, etc.).
+// SetServerMetricsOptions appends gRPC server metrics collector options
+// (histogram buckets, context label names, namespace, etc.).
+//
+// To populate dynamic context labels on grpc_server_* metrics, pair this with
+// [SetServerMetricsInterceptorOptions] using [grpcprom.WithLabelsFromContext],
+// and ensure label values are present on the request context before the metrics
+// interceptor runs (e.g. via [AddUnaryServerInterceptor] or [TraceIdInterceptor]-style
+// injection). Example:
+//
+//	interceptors.SetServerMetricsOptions(grpcprom.WithContextLabels("client_id"))
+//	interceptors.SetServerMetricsInterceptorOptions(
+//		grpcprom.WithLabelsFromContext(func(ctx context.Context) prometheus.Labels {
+//			return prometheus.Labels{"client_id": clientIDFrom(ctx)}
+//		}),
+//	)
+//
 // Must be called during initialization, before the server starts. Not safe for concurrent use.
 func SetServerMetricsOptions(opts ...grpcprom.ServerMetricsOption) {
 	defaultConfig.srvMetricsOpts = append(defaultConfig.srvMetricsOpts, opts...)
 }
 
-// SetClientMetricsOptions appends gRPC client metrics options.
+// SetServerMetricsInterceptorOptions appends options passed to the gRPC server
+// metrics unary/stream interceptors (e.g. [grpcprom.WithLabelsFromContext],
+// [grpcprom.WithExemplarFromContext]).
+//
+// These are distinct from [SetServerMetricsOptions]: collector options define the
+// metric schema, while interceptor options control how each RPC observation is
+// labeled. Both are required for dynamic context labels.
+//
+// Must be called during initialization, before the server starts. Not safe for concurrent use.
+func SetServerMetricsInterceptorOptions(opts ...grpcprom.Option) {
+	defaultConfig.srvMetricsInterceptorOpts = append(defaultConfig.srvMetricsInterceptorOpts, opts...)
+}
+
+// SetClientMetricsOptions appends gRPC client metrics collector options.
 // Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
 func SetClientMetricsOptions(opts ...grpcprom.ClientMetricsOption) {
 	defaultConfig.cltMetricsOpts = append(defaultConfig.cltMetricsOpts, opts...)
+}
+
+// SetClientMetricsInterceptorOptions appends options passed to the gRPC client
+// metrics unary/stream interceptors (e.g. [grpcprom.WithExemplarFromContext]).
+// Must be called during initialization, before any RPCs are made. Not safe for concurrent use.
+func SetClientMetricsInterceptorOptions(opts ...grpcprom.Option) {
+	defaultConfig.cltMetricsInterceptorOpts = append(defaultConfig.cltMetricsInterceptorOpts, opts...)
 }
 
 // protovalidateNew is a test seam over protovalidate.New so the error

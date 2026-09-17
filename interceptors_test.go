@@ -18,10 +18,12 @@ import (
 	"github.com/go-coldbrew/log"
 	"github.com/go-coldbrew/log/loggers"
 	nrutil "github.com/go-coldbrew/tracing/newrelic"
+	grpcprom "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
 	ratelimit_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/ratelimit"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	newrelic "github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcmd "google.golang.org/grpc/metadata"
@@ -2596,5 +2598,117 @@ func TestSetProtoValidateOptions_InvalidatesCache(t *testing.T) {
 	// option set, producing a non-Global validator.
 	if got := getProtoValidator(); got == protovalidate.GlobalValidator {
 		t.Error("expected getProtoValidator to rebuild after SetProtoValidateOptions; still returning GlobalValidator")
+	}
+}
+
+func TestSetServerMetricsInterceptorOptions(t *testing.T) {
+	resetGlobals()
+	defer resetGlobals()
+
+	if len(defaultConfig.srvMetricsInterceptorOpts) != 0 {
+		t.Fatalf("expected no interceptor opts by default, got %d", len(defaultConfig.srvMetricsInterceptorOpts))
+	}
+
+	SetServerMetricsInterceptorOptions(
+		grpcprom.WithLabelsFromContext(func(ctx context.Context) prometheus.Labels {
+			return prometheus.Labels{"client_id": "poss"}
+		}),
+	)
+	if len(defaultConfig.srvMetricsInterceptorOpts) != 1 {
+		t.Fatalf("expected 1 interceptor opt, got %d", len(defaultConfig.srvMetricsInterceptorOpts))
+	}
+
+	SetServerMetricsInterceptorOptions(
+		grpcprom.WithExemplarFromContext(func(ctx context.Context) prometheus.Labels {
+			return nil
+		}),
+	)
+	if len(defaultConfig.srvMetricsInterceptorOpts) != 2 {
+		t.Fatalf("expected opts to append, got %d", len(defaultConfig.srvMetricsInterceptorOpts))
+	}
+}
+
+func TestSetClientMetricsInterceptorOptions(t *testing.T) {
+	resetGlobals()
+	defer resetGlobals()
+
+	SetClientMetricsInterceptorOptions(
+		grpcprom.WithExemplarFromContext(func(ctx context.Context) prometheus.Labels {
+			return nil
+		}),
+	)
+	if len(defaultConfig.cltMetricsInterceptorOpts) != 1 {
+		t.Fatalf("expected 1 client interceptor opt, got %d", len(defaultConfig.cltMetricsInterceptorOpts))
+	}
+}
+
+// TestDefaultInterceptors_MetricsInterceptorUsesLabelsFromContext verifies that
+// labels injected onto context by an outer interceptor are attached to
+// grpc_server_handled_total when both WithContextLabels and
+// WithLabelsFromContext are configured.
+func TestDefaultInterceptors_MetricsInterceptorUsesLabelsFromContext(t *testing.T) {
+	resetGlobals()
+	defer resetGlobals()
+
+	const labelKey = "client_id"
+	const labelVal = "serviceability"
+
+	// Isolate from the default registry so prior tests that registered
+	// ServerMetrics without context labels cannot poison this assertion.
+	reg := prometheus.NewRegistry()
+	sm := grpcprom.NewServerMetrics(
+		grpcprom.WithContextLabels(labelKey),
+		grpcprom.WithServerHandlingTimeHistogram(),
+	)
+	reg.MustRegister(sm)
+
+	// Mirror ColdBrew wiring: TraceId-style outer interceptor injects the
+	// label onto ctx, then the metrics interceptor reads it via labelsFn.
+	inject := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		ctx = context.WithValue(ctx, labelKey, labelVal)
+		return handler(ctx, req)
+	}
+	metrics := sm.UnaryServerInterceptor(
+		grpcprom.WithLabelsFromContext(func(ctx context.Context) prometheus.Labels {
+			v, _ := ctx.Value(labelKey).(string)
+			return prometheus.Labels{labelKey: v}
+		}),
+	)
+	chain := chainUnaryServer([]grpc.UnaryServerInterceptor{inject, metrics})
+
+	_, err := chain(context.Background(), nil, &grpc.UnaryServerInfo{
+		FullMethod: "/test.Service/Query",
+	}, func(ctx context.Context, req any) (any, error) {
+		return "ok", nil
+	})
+	if err != nil {
+		t.Fatalf("chain: %v", err)
+	}
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather: %v", err)
+	}
+
+	var handled *dto.MetricFamily
+	for _, mf := range mfs {
+		if mf.GetName() == "grpc_server_handled_total" {
+			handled = mf
+			break
+		}
+	}
+	if handled == nil {
+		t.Fatal("expected grpc_server_handled_total metric")
+	}
+	if len(handled.Metric) == 0 {
+		t.Fatal("expected at least one sample")
+	}
+
+	labels := map[string]string{}
+	for _, l := range handled.Metric[0].Label {
+		labels[l.GetName()] = l.GetValue()
+	}
+	if got := labels[labelKey]; got != labelVal {
+		t.Fatalf("label %q: got %q, want %q (all labels: %v)", labelKey, got, labelVal, labels)
 	}
 }
